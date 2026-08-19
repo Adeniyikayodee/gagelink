@@ -23,3 +23,9 @@ def test_quantity_guard_is_a_declared_dependency():
     not say so installs into an environment where they are absent."""
     pyproject = (Path(__file__).resolve().parent.parent / "pyproject.toml").read_text()
     assert "quantity-guard" in pyproject
+
+
+def test_the_mcp_entry_point_is_declared():
+    """A server nobody can start is not a server; the console script is how it is run."""
+    pyproject = (Path(__file__).resolve().parent.parent / "pyproject.toml").read_text()
+    assert 'gagelink-mcp = "gagelink.server:main"' in pyproject

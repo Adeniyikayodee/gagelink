@@ -4,8 +4,8 @@ Hydrology retrieval for AI agents. Values arrive carrying their unit, the datum 
 measured from, their timezone, and whether the record is provisional or approved, and every
 request is recorded in a form that lets a session be re-run and its differences attributed.
 
-**Pre-alpha.** Transport, normalisation into typed quantities, and the USGS, forecast, and
-network tools are present. The MCP server and replay are not. The API will change.
+**Pre-alpha.** Transport, normalisation into typed quantities, the tool surface, and the
+MCP server are present. Replay is not. The API will change.
 
 ```bash
 pip install gagelink
@@ -143,6 +143,30 @@ a silent truncation reads as coverage.
 | `navigate_network` | monitoring locations upstream or downstream along the river |
 | `get_basin` | the area draining to a point |
 | `lookup_parameter` | resolve a parameter code, since readings carry no name |
+
+## As an MCP server
+
+```bash
+export GAGELINK_API_KEY=...        # free, see below
+gagelink-mcp
+```
+
+```json
+{"mcpServers": {"gagelink": {"command": "gagelink-mcp"}}}
+```
+
+Eleven tools, no more. A model degrades as its tool list grows, so the surface is organised
+by verb and the choice of which service answers is made by the server rather than put to the
+caller.
+
+The tool descriptions are part of the product rather than documentation of it. In the
+quantity-guard evaluation, declaring physical metadata in the schema without enforcing it
+still recovered a third of the runs that failed at baseline, so what a description says about
+datums, units, and provisional record does work before any validation runs.
+
+A tool failure comes back as content marked in error rather than as a protocol fault, which
+keeps the repair in front of the model instead of ending the turn. The session resets on
+`initialize`, so one conversation's quantities cannot appear in another's manifest.
 
 ## Freeboard, which is where the hazards meet
 
