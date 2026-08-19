@@ -4,8 +4,8 @@ Hydrology retrieval for AI agents. Values arrive carrying their unit, the datum 
 measured from, their timezone, and whether the record is provisional or approved, and every
 request is recorded in a form that lets a session be re-run and its differences attributed.
 
-**Pre-alpha.** Transport, normalisation into typed quantities, and the USGS tool surface
-are present. Forecast and network tools, the MCP server, and replay are not. The API will
+**Pre-alpha.** Transport, normalisation into typed quantities, and the USGS and forecast
+tools are present. Network navigation, the MCP server, and replay are not. The API will
 change.
 
 ```bash
@@ -140,7 +140,49 @@ a silent truncation reads as coverage.
 | `get_series` | a date range, as a handle plus a summary |
 | `slice_series` | narrow a stored series without fetching again |
 | `get_peaks` | annual peak flow record |
+| `get_forecast` | observed and forecast stage, with flood thresholds |
 | `lookup_parameter` | resolve a parameter code, since readings carry no name |
+
+## Freeboard, which is where the hazards meet
+
+`python demo/freeboard.py` runs the whole thing offline from recorded responses:
+
+```
+stage      3.02 ft (GAGE:01646500)
+crest      41 ft (NAVD88)
+
+The two are both lengths, so nothing dimensional separates them:
+  refused: cannot difference an elevation on NAVD88 against one on GAGE:01646500
+
+The gage's zero is at 37.04 ft NAVD88, so the stage is 40.06 ft (NAVD88).
+  freeboard = 0.94 ft
+
+Ignoring the datum gives 37.98 ft of margin where 0.94 ft is correct,
+overstating it by a factor of 40.
+```
+
+A stage and a surveyed elevation are both lengths in feet, and subtracting one from the
+other returns a number that looks like a freeboard. The error is silent, it runs in the
+direction of reporting a levee as safe, and no units library prevents it because nothing
+about the units is wrong.
+
+## Forecasts
+
+Flood thresholds come from the NOAA National Water Prediction Service, since a stage means
+nothing until it is set against the stage at which the river floods. Three things in that
+payload need handling and none is signposted:
+
+Flow appears as `cfs` in the flood categories and as `kcfs` in the status block of the same
+response, so a caller reading both and treating them alike is out by a factor of a thousand.
+
+Thresholds that were never set are published as `-9999` rather than omitted. That is
+dimensionally valid, plausible in sign only, and passes every check downstream, so it is
+read as the sentinel it is.
+
+Stages are on the gage's own datum, not a national one. The observed stage published there
+matches USGS parameter 00065 at the same station and time exactly, which is the evidence for
+that reading, and it is why a flood stage differences against a gage height but not against
+a surveyed elevation.
 
 ## API keys and rate limits
 

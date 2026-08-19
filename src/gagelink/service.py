@@ -148,6 +148,35 @@ class Retrieval:
     quota: Quota = field(default=Quota())
     from_cache: bool = False
 
+    @classmethod
+    def of(
+        cls,
+        collection: str,
+        url: str,
+        params: Mapping[str, Any],
+        status: int,
+        body: str,
+        quota: "Quota",
+        *,
+        from_cache: bool = False,
+    ) -> "Retrieval":
+        """Build a record from a response, stamping it with the moment it arrived.
+
+        Shared by every client rather than written once per service, so that a manifest
+        holds one shape of record regardless of which service produced it.
+        """
+        return cls(
+            collection=collection,
+            url=url,
+            params=dict(params),
+            retrieved_at=datetime.now(timezone.utc),
+            status=status,
+            sha256=hashlib.sha256(body.encode()).hexdigest(),
+            size=len(body),
+            quota=quota,
+            from_cache=from_cache,
+        )
+
     def record(self) -> dict[str, Any]:
         """The manifest fragment for this request."""
         return {
@@ -277,7 +306,7 @@ class Service:
         url = self.url_for(collection, **params)
         cached = self._cache.get(url)
         if cached is not None:
-            return json.loads(cached), self._record(
+            return json.loads(cached), Retrieval.of(
                 collection, url, params, 200, cached, self.quota, from_cache=True
             )
 
@@ -318,27 +347,5 @@ class Service:
             ) from exc
 
         self._cache.set(url, body)
-        return parsed, self._record(collection, url, params, status, body, quota)
+        return parsed, Retrieval.of(collection, url, params, status, body, quota)
 
-    @staticmethod
-    def _record(
-        collection: str,
-        url: str,
-        params: Mapping[str, Any],
-        status: int,
-        body: str,
-        quota: Quota,
-        *,
-        from_cache: bool = False,
-    ) -> Retrieval:
-        return Retrieval(
-            collection=collection,
-            url=url,
-            params=dict(params),
-            retrieved_at=datetime.now(timezone.utc),
-            status=status,
-            sha256=hashlib.sha256(body.encode()).hexdigest(),
-            size=len(body),
-            quota=quota,
-            from_cache=from_cache,
-        )

@@ -19,3 +19,5 @@ jobs:
           python-version: ${{ matrix.python }}
       - run: pip install -e ".[dev]"
       - run: pytest -q
+      - name: demo runs offline
+        run: python demo/freeboard.py

@@ -22,6 +22,7 @@ from quantity_guard import session as quantity_ledger
 
 from . import __version__
 from .normalise import Location, location_from
+from .nwps import Forecasts, Gauge
 from quantity_guard import Q
 
 from .service import Retrieval, Service
@@ -40,15 +41,18 @@ class Session:
         self,
         service: Service | None = None,
         *,
+        forecasts: Forecasts | None = None,
         api_key: str | None = None,
         question: str = "",
     ) -> None:
         self.service = service if service is not None else Service(api_key=api_key)
+        self.forecasts = forecasts if forecasts is not None else Forecasts()
         self.question = question
         self.started_at = datetime.now(timezone.utc)
         self.retrievals: list[Retrieval] = []
         self.locations: dict[str, Location] = {}
         self.series: dict[str, dict[str, Any]] = {}
+        self.gauges: dict[str, Gauge] = {}
         self.ledger = None
         self._stack: ExitStack | None = None
 
@@ -90,6 +94,22 @@ class Session:
         station.register()
         self.locations[identifier] = station
         return station
+
+    def gauge(self, identifier: str) -> Gauge:
+        """A forecast point, fetched once per session.
+
+        Accepts the USGS station number as readily as the NWS location id, since a
+        question arrives naming the station and requiring the caller to translate first
+        would be a step with no purpose.
+        """
+        if identifier in self.gauges:
+            return self.gauges[identifier]
+
+        number = identifier.split("-")[-1]
+        gauge, retrieval = self.forecasts.gauge(number)
+        self.retrievals.append(retrieval)
+        self.gauges[identifier] = gauge
+        return gauge
 
     # Provenance --------------------------------------------------------------------
 

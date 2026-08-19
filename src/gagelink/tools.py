@@ -22,6 +22,7 @@ from quantity_guard import Q
 
 from .normalise import STATISTICS, Reading, readings_from
 from .results import DEFAULT_BUDGET_TOKENS, ErrorCode, Result, unit_text
+from .nwps import GaugeNotFound
 from .service import QuotaExhausted, ServiceUnavailable
 from .session import Session
 
@@ -402,6 +403,76 @@ class Toolkit:
                 "peaks_in_record": len(readings),
             },
         )
+
+    # Forecasts ----------------------------------------------------------------------
+
+    @_guarded
+    def get_forecast(self, identifier: str) -> Result:
+        """Observed stage, forecast stage, and the thresholds that give them meaning.
+
+        A stage is a number until it is set against the stage at which the river floods,
+        and the two come from different services, so this is where they meet.
+        """
+        try:
+            gauge = self.session.gauge(identifier)
+        except GaugeNotFound:
+            return Result.failure(
+                ErrorCode.NO_DATA,
+                f"{identifier} has no forecast point",
+                "Most gaged streams carry no forecast location, which is a fact about "
+                "the river rather than a mistake in the identifier. Observations are "
+                "still available through get_latest.",
+            )
+
+        thresholds = {
+            t.name: {"stage": t.stage, "flow": t.flow} for t in gauge.thresholds
+        }
+        for t in gauge.thresholds:
+            if t.stage is not None:
+                self.session.record("get_forecast", f"{t.name}_stage", t.stage)
+        for value, field in ((gauge.observed, "observed"), (gauge.forecast, "forecast")):
+            if value is not None:
+                self.session.record("get_forecast", field, value)
+
+        result = Result(
+            ok=True,
+            data={
+                "gauge": gauge.lid,
+                "name": gauge.name,
+                "usgs_id": gauge.usgs_id,
+                "timezone": gauge.timezone,
+                "observed": {
+                    "stage": gauge.observed,
+                    "time": gauge.observed_at,
+                    "category": gauge.observed_category,
+                },
+                "forecast": {
+                    "stage": gauge.forecast,
+                    "time": gauge.forecast_at,
+                    "category": gauge.forecast_category,
+                },
+                "thresholds": thresholds,
+            },
+        )
+
+        margin = gauge.freeboard_to("minor")
+        if margin is not None:
+            self.session.record_derived(margin, "stage below minor flooding")
+            result.data["below_minor_flooding"] = margin
+
+        result.note(
+            f"Stages here and the thresholds beside them are all on {gauge.stage_datum}, "
+            f"the gage's own datum, so differencing them is well defined. A surveyed "
+            f"elevation is not on that datum and comparing one against these directly "
+            f"will be refused."
+        )
+        missing = [t.name for t in gauge.thresholds if t.flow is None]
+        if missing:
+            result.note(
+                f"no flow threshold is published for {', '.join(missing)}; the service "
+                f"writes -9999 there, which is a sentinel and not a discharge"
+            )
+        return result
 
     # Reference ----------------------------------------------------------------------
 

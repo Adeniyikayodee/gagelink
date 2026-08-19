@@ -29,6 +29,7 @@ from .normalise import (
     readings_from,
     timezone_of,
 )
+from .nwps import Forecasts, Gauge, GaugeNotFound, Threshold
 from .results import ErrorCode, Result
 from .session import Session
 from .tools import Toolkit
@@ -49,6 +50,10 @@ from .service import (
 __all__ = [
     "BASE_URL",
     "ErrorCode",
+    "Forecasts",
+    "Gauge",
+    "GaugeNotFound",
+    "Threshold",
     "Result",
     "Session",
     "Toolkit",
