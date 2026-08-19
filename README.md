@@ -4,8 +4,8 @@ Hydrology retrieval for AI agents. Values arrive carrying their unit, the datum 
 measured from, their timezone, and whether the record is provisional or approved, and every
 request is recorded in a form that lets a session be re-run and its differences attributed.
 
-**Pre-alpha.** The transport layer against the USGS Water Data APIs is present. The tool
-surface, normalisation into typed quantities, and replay are not. The API will change.
+**Pre-alpha.** Transport against the USGS Water Data APIs and normalisation into typed
+quantities are present. The tool surface and replay are not. The API will change.
 
 ```bash
 pip install gagelink
@@ -49,6 +49,51 @@ retrieval.quota         # Quota(limit=1000, remaining=999)
 the page alone, because a number that reaches an answer without the request that produced it
 cannot be replayed, and pairing them at the only entry point is cheaper than remembering to
 record it.
+
+Payloads become quantities that carry their own reference frames:
+
+```python
+from gagelink import location_from, readings_from
+
+page, _ = service.items("monitoring-locations", id="USGS-06730500")
+station = location_from(page["features"][0])
+station.register()                       # its datum, and the offset where one is published
+
+observations, _ = service.items("latest-continuous", monitoring_location_id=station.id)
+readings = {r.parameter_code: r for r in readings_from(observations, station)}
+
+readings["00060"].value       # Q(1.35 ft³/s (provisional))
+readings["00065"].value       # Q(9.11 ft (GAGE:06730500, provisional))
+readings["00065"].value.to_datum("NGVD29")   # Q(4869.11 ft (NGVD29, provisional))
+readings["00065"].value.to_datum("NAVD88")   # DatumConversionUnavailable
+```
+
+That last line is the point. Boulder Creek publishes its altitude on NGVD29, so a stage
+there resolves onto NGVD29 and refuses NAVD88, since the offset between the two varies with
+location and is not published here. Assuming the modern datum because it is the modern datum
+is a freeboard error one step earlier than the one anybody looks for.
+
+### What is not published, and what is done about it
+
+`altitude` and `drainage_area` come back as bare numbers, and the collection schema states
+no unit for either, so the USGS conventions of feet and square miles are applied in
+`normalise.py` where they are visible rather than assumed further downstream.
+
+A unit with no mapping is refused rather than guessed. A unit that pint can parse but that
+this package has no entry for is allowed through with a warning, because parseable is not
+the same as understood: `ppt` reads as parts per trillion to pint and means parts per
+thousand to USGS, which is a factor of 10^9 between two dimensionally identical readings.
+
+A missing value is `null` here rather than the -999999 that WaterServices published, and it
+stays missing. The qualifier says why, `["EQUIP"]` for an equipment outage.
+
+Approval arrives as `Provisional` or `Approved` rather than as `P` or `A`, and condition
+codes grade below their review status, so approved record of an ice-affected measurement
+grades as unverified rather than as approved.
+
+The station timezone is resolved from the abbreviation together with the daylight saving
+flag, since MST without daylight saving is Arizona and MST with it is Colorado, and they
+differ by an hour for eight months of the year.
 
 ## API keys and rate limits
 

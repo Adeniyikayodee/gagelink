@@ -9,9 +9,21 @@ This package retrieves against the USGS Water Data APIs and keeps that metadata 
 using quantity-guard to enforce it at the tool boundary, and records each request in a form
 that lets a session be re-run and its differences attributed.
 
-Pre-alpha. The transport layer is present and the tool surface is not.
+Pre-alpha. Transport and normalisation are present; the tool surface is not.
 """
 
+from .normalise import (
+    Location,
+    Reading,
+    UnitsNotPublished,
+    UnknownUnit,
+    grade,
+    location_from,
+    parse_unit,
+    reading_from,
+    readings_from,
+    timezone_of,
+)
 from .service import (
     BASE_URL,
     COLLECTIONS,
@@ -32,6 +44,16 @@ __version__ = "0.0.1"
 
 __all__ = [
     "BASE_URL",
+    "Location",
+    "Reading",
+    "UnitsNotPublished",
+    "UnknownUnit",
+    "grade",
+    "location_from",
+    "parse_unit",
+    "reading_from",
+    "readings_from",
+    "timezone_of",
     "COLLECTIONS",
     "Cache",
     "GagelinkError",
