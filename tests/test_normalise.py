@@ -239,3 +239,14 @@ def test_a_station_datum_can_itself_be_on_ngvd29():
     assert stage.to_datum("NGVD29").magnitude == pytest.approx(4869.11)
     with pytest.raises(Exception):
         stage.to_datum("NAVD88")
+
+
+def test_a_revised_value_is_not_graded_down_for_having_been_corrected():
+    """REVISED describes the record rather than how far it can be trusted."""
+    assert grade("Approved", ["REVISED"]) == "approved"
+
+
+def test_a_reading_on_a_different_datum_is_graded_down():
+    """DIFFDATUM is the datum hazard arriving as a qualifier rather than as a frame, and
+    nothing downstream would otherwise see it. Observed live on peak record."""
+    assert grade("Approved", ["DIFFDATUM"]) == "unverified"

@@ -15,7 +15,7 @@ from __future__ import annotations
 import re
 import warnings
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Mapping
 
 import pint
@@ -105,7 +105,16 @@ QUALIFIERS: dict[str, str] = {
     "DRY": "estimated",
     "ZFL": "estimated",
     "EST": "estimated",
+    # Gage height not measured on the station's current datum, observed live on peak
+    # record. It is the datum hazard arriving as a qualifier rather than as a frame, and
+    # nothing downstream would otherwise see it, so it grades down.
+    "DIFFDATUM": "unverified",
 }
+
+#: Qualifiers that describe the record without bearing on how far it can be trusted. A
+#: revised value is better than an unrevised one, so grading it down would penalise the
+#: agency for having corrected it.
+NEUTRAL_QUALIFIERS = frozenset({"REVISED", "PROVISIONAL", "APPROVED"})
 
 #: Parameters whose value is an elevation, and the frame each is measured against. Gage
 #: height is on the station's own datum and is resolved per station; the rest name a
@@ -121,6 +130,18 @@ PARAMETER_DATUM: dict[str, str] = {
 #: sign-inverted reference is not the same kind of object as an elevation and treating it
 #: as one would let a depth be differenced against a stage.
 DOWNWARD_PARAMETERS = frozenset({"72019", "72020", "61055"})
+
+#: Statistic codes, of which four cover nearly all published record. A daily mean and a
+#: daily maximum are different quantities and the code is the only thing distinguishing
+#: them in a payload that otherwise looks identical.
+STATISTICS: dict[str, str] = {
+    "00001": "maximum",
+    "00002": "minimum",
+    "00003": "mean",
+    "00006": "sum",
+    "00008": "median",
+    "00011": "instantaneous",
+}
 
 #: Neither of these is published with a unit, and the collection schema states none, so
 #: the USGS convention is applied here rather than assumed silently somewhere later.
@@ -201,6 +222,8 @@ def grade(approval: str | None, qualifiers: list[str] | None) -> str | None:
         grades.append(mapped)
     for code in qualifiers or []:
         key = str(code).strip().upper()
+        if key in NEUTRAL_QUALIFIERS:
+            continue
         if key in QUALIFIERS:
             grades.append(QUALIFIERS[key])
         else:
@@ -274,21 +297,38 @@ class Reading:
     parameter_code: str
     value: Q | None
     observed_at: datetime | None
+    observed_on: date | None = None
     approval: str | None = None
     qualifiers: tuple[str, ...] = ()
     unit_published: str | None = None
     value_published: str | None = None
     time_series_id: str | None = None
+    statistic_id: str | None = None
 
     @property
     def is_missing(self) -> bool:
         return self.value is None
 
+    @property
+    def statistic(self) -> str | None:
+        """What the value is a statistic of, where the service said."""
+        return STATISTICS.get(self.statistic_id or "")
+
     def age(self, now: datetime | None = None) -> timedelta | None:
-        """How old the reading is, or None if it carries no time."""
-        if self.observed_at is None:
+        """How old the reading is, or None if it carries no time at all.
+
+        A daily value is aged from the end of the day it describes, which is the earliest
+        moment it could have been complete. Aging it from the start would report it as a
+        day older than it is.
+        """
+        moment = self.observed_at
+        if moment is None and self.observed_on is not None:
+            moment = datetime.combine(
+                self.observed_on, datetime.min.time(), tzinfo=timezone.utc
+            ) + timedelta(days=1)
+        if moment is None:
             return None
-        return (now or datetime.now(timezone.utc)) - self.observed_at
+        return (now or datetime.now(timezone.utc)) - moment
 
     def is_stale(self, max_age: timedelta, now: datetime | None = None) -> bool:
         """Whether the reading is older than a caller is willing to accept.
@@ -300,13 +340,26 @@ class Reading:
         return age is None or age > max_age
 
 
-def _time(text: str | None) -> datetime | None:
+def _time(text: str | None) -> tuple[datetime | None, date | None]:
+    """An instant and a date, of which a reading has one or the other.
+
+    Continuous record is stamped with an instant carrying an offset. Daily and peak record
+    is stamped with a date alone, which is not an instant and is not converted into one:
+    a daily mean describes a day, and giving it a clock time would assert something the
+    service did not publish.
+    """
     if not text:
-        return None
-    parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        return None, None
+    cleaned = text.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(cleaned)
+    except ValueError:
+        return None, None
+    if "T" not in cleaned and " " not in cleaned:
+        return None, parsed.date()
     # An offset is required rather than assumed. A naive timestamp from a service that
     # publishes offsets everywhere else is a sign of a changed payload, not of local time.
-    return parsed if parsed.tzinfo else None
+    return (parsed, None) if parsed.tzinfo else (None, None)
 
 
 def location_from(feature: Mapping[str, Any]) -> Location:
@@ -368,16 +421,19 @@ def reading_from(
             quality=grade(props.get("approval_status"), list(qualifiers)),
         )
 
+    at, on = _time(props.get("time"))
     return Reading(
         location_id=str(props.get("monitoring_location_id") or ""),
         parameter_code=code,
         value=value,
-        observed_at=_time(props.get("time")),
+        observed_at=at,
+        observed_on=on,
         approval=props.get("approval_status"),
         qualifiers=qualifiers,
         unit_published=props.get("unit_of_measure"),
         value_published=None if raw is None else str(raw),
         time_series_id=props.get("time_series_id"),
+        statistic_id=props.get("statistic_id"),
     )
 
 

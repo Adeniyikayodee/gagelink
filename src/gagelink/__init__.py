@@ -9,8 +9,13 @@ This package retrieves against the USGS Water Data APIs and keeps that metadata 
 using quantity-guard to enforce it at the tool boundary, and records each request in a form
 that lets a session be re-run and its differences attributed.
 
-Pre-alpha. Transport and normalisation are present; the tool surface is not.
+Pre-alpha. Transport, normalisation, and the USGS tools are present. Forecast and
+network tools, the MCP server, and replay are not.
 """
+
+#: Single source of truth for the version; pyproject reads it from here, so the packaged
+#: metadata and the attribute cannot drift apart.
+__version__ = "0.0.1"
 
 from .normalise import (
     Location,
@@ -24,6 +29,9 @@ from .normalise import (
     readings_from,
     timezone_of,
 )
+from .results import ErrorCode, Result
+from .session import Session
+from .tools import Toolkit
 from .service import (
     BASE_URL,
     COLLECTIONS,
@@ -38,12 +46,12 @@ from .service import (
     UnknownCollection,
 )
 
-#: Single source of truth for the version; pyproject reads it from here, so the packaged
-#: metadata and the attribute cannot drift apart.
-__version__ = "0.0.1"
-
 __all__ = [
     "BASE_URL",
+    "ErrorCode",
+    "Result",
+    "Session",
+    "Toolkit",
     "Location",
     "Reading",
     "UnitsNotPublished",

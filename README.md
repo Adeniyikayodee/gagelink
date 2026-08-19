@@ -4,8 +4,9 @@ Hydrology retrieval for AI agents. Values arrive carrying their unit, the datum 
 measured from, their timezone, and whether the record is provisional or approved, and every
 request is recorded in a form that lets a session be re-run and its differences attributed.
 
-**Pre-alpha.** Transport against the USGS Water Data APIs and normalisation into typed
-quantities are present. The tool surface and replay are not. The API will change.
+**Pre-alpha.** Transport, normalisation into typed quantities, and the USGS tool surface
+are present. Forecast and network tools, the MCP server, and replay are not. The API will
+change.
 
 ```bash
 pip install gagelink
@@ -94,6 +95,52 @@ grades as unverified rather than as approved.
 The station timezone is resolved from the abbreviation together with the daylight saving
 flag, since MST without daylight saving is Arizona and MST with it is Colorado, and they
 differ by an hour for eight months of the year.
+
+## Tools
+
+A session holds the state for one question and the record of what answered it. Tools return
+a result rather than raising, because a failure carrying a repair keeps a model in the
+conversation where it can correct itself, and a raised exception ends the turn.
+
+```python
+from gagelink import Session, Toolkit
+
+with Session(question="How high is the Potomac at Little Falls?") as work:
+    kit = Toolkit(work)
+    kit.describe_location("USGS-01646500")
+    kit.get_latest("USGS-01646500", parameters=["00060", "00065"], max_age_hours=6)
+
+    work.audit("The gage height is 3.02 ft and the discharge is 2960 ft3/s.")
+    work.manifest()
+```
+
+Every value leaves with its frame attached, and every one is entered in a ledger, so an
+answer can be checked against what was actually retrieved:
+
+```
+[ok]         3.02 ft        from get_latest.00065
+[ok]         2960 ft3/s     from get_latest.00060
+[UNSOURCED]  116000 ft3/s   no tool output produced this value
+```
+
+The third line is the check earning its place. The figure is a plausible discharge for that
+river, it is wrong, and nothing about the sentence containing it indicates as much.
+
+A series is returned as a handle with a summary and a twenty-point sample rather than as its
+points, since a year of 15-minute record is 35,000 values. The handle is derived from the
+query that produced it, so a replay of the same session produces the same handle. Results
+are budgeted, and anything dropped to stay inside the budget is stated in the result, since
+a silent truncation reads as coverage.
+
+| tool | purpose |
+|---|---|
+| `find_locations` | search by state, county, hydrologic unit, site type, or bounding box |
+| `describe_location` | metadata, datum, timezone, and the offset a stage needs |
+| `get_latest` | most recent value per parameter, with age and quality |
+| `get_series` | a date range, as a handle plus a summary |
+| `slice_series` | narrow a stored series without fetching again |
+| `get_peaks` | annual peak flow record |
+| `lookup_parameter` | resolve a parameter code, since readings carry no name |
 
 ## API keys and rate limits
 
