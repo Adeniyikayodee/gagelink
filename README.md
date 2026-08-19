@@ -4,9 +4,8 @@ Hydrology retrieval for AI agents. Values arrive carrying their unit, the datum 
 measured from, their timezone, and whether the record is provisional or approved, and every
 request is recorded in a form that lets a session be re-run and its differences attributed.
 
-**Pre-alpha.** Transport, normalisation into typed quantities, and the USGS and forecast
-tools are present. Network navigation, the MCP server, and replay are not. The API will
-change.
+**Pre-alpha.** Transport, normalisation into typed quantities, and the USGS, forecast, and
+network tools are present. The MCP server and replay are not. The API will change.
 
 ```bash
 pip install gagelink
@@ -141,6 +140,8 @@ a silent truncation reads as coverage.
 | `slice_series` | narrow a stored series without fetching again |
 | `get_peaks` | annual peak flow record |
 | `get_forecast` | observed and forecast stage, with flood thresholds |
+| `navigate_network` | monitoring locations upstream or downstream along the river |
+| `get_basin` | the area draining to a point |
 | `lookup_parameter` | resolve a parameter code, since readings carry no name |
 
 ## Freeboard, which is where the hazards meet
@@ -183,6 +184,22 @@ Stages are on the gage's own datum, not a national one. The observed stage publi
 matches USGS parameter 00065 at the same station and time exactly, which is the evidence for
 that reading, and it is why a flood stage differences against a gage height but not against
 a surveyed elevation.
+
+## The river network
+
+Navigation runs along the river rather than within a radius, which is the distinction that
+makes the answer useful: a gage two miles away on the next catchment is upstream of nothing
+here. Directions are words rather than the index's two-letter codes, so `upstream` includes
+tributaries and `upstream_main` follows the main stem alone.
+
+A basin arrives as a polygon of a couple of thousand coordinate pairs. That is the answer to
+a mapping question and the wrong answer to every question an agent asks, so the polygon is
+kept and its area, extent, and vertex count are reported. The area is computed from the
+polygon by the line-integral form of the spherical area, which needs no projection and so
+has no zone to choose or to get wrong. It agrees with the drainage area USGS publishes for
+the one station where both figures exist to 0.06%, and the result says it is computed rather
+than published, so it is not quoted against a surveyed figure as though the two were the
+same.
 
 ## API keys and rate limits
 

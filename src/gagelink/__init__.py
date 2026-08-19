@@ -29,6 +29,7 @@ from .normalise import (
     readings_from,
     timezone_of,
 )
+from .nldi import Basin, Network, NetworkSite, NotOnTheNetwork, ring_area
 from .nwps import Forecasts, Gauge, GaugeNotFound, Threshold
 from .results import ErrorCode, Result
 from .session import Session
@@ -50,7 +51,12 @@ from .service import (
 __all__ = [
     "BASE_URL",
     "ErrorCode",
+    "Basin",
     "Forecasts",
+    "Network",
+    "NetworkSite",
+    "NotOnTheNetwork",
+    "ring_area",
     "Gauge",
     "GaugeNotFound",
     "Threshold",

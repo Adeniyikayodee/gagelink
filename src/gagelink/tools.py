@@ -22,6 +22,7 @@ from quantity_guard import Q
 
 from .normalise import STATISTICS, Reading, readings_from
 from .results import DEFAULT_BUDGET_TOKENS, ErrorCode, Result, unit_text
+from .nldi import DIRECTIONS, NotOnTheNetwork
 from .nwps import GaugeNotFound
 from .service import QuotaExhausted, ServiceUnavailable
 from .session import Session
@@ -473,6 +474,123 @@ class Toolkit:
                 f"writes -9999 there, which is a sentinel and not a discharge"
             )
         return result
+
+    # Network --------------------------------------------------------------------------
+
+    @_guarded
+    def navigate_network(
+        self,
+        identifier: str,
+        direction: str = "upstream",
+        distance_km: float = 50,
+        limit: int = 20,
+    ) -> Result:
+        """Monitoring locations along the river from a starting point.
+
+        Along the river rather than within a radius, which is the distinction that makes
+        the answer useful: a gage two miles away on the next catchment is not upstream of
+        anything here. Direction is upstream, upstream_main, downstream, or
+        downstream_diversions, where upstream includes tributaries and upstream_main
+        follows the main stem alone.
+        """
+        if direction not in DIRECTIONS:
+            return Result.failure(
+                ErrorCode.INVALID_ARGUMENTS,
+                f"unknown direction {direction!r}",
+                f"Use one of {', '.join(sorted(DIRECTIONS))}.",
+            )
+
+        try:
+            sites = self.session.navigate(identifier, direction, distance_km)
+        except NotOnTheNetwork:
+            return Result.failure(
+                ErrorCode.NO_DATA,
+                f"{identifier} is not indexed to the river network",
+                "Wells, tidal gages, and locations off the mapped hydrography are not on "
+                "the network. Observations are still available through get_latest.",
+            )
+
+        if not sites:
+            return Result.failure(
+                ErrorCode.NO_DATA,
+                f"no monitoring location lies {direction} of {identifier} within "
+                f"{distance_km:g} km along the river",
+                "Increase distance_km, or try upstream rather than upstream_main, which "
+                "follows the main stem alone and skips the tributaries.",
+            )
+
+        found = [
+            {
+                "id": s.identifier,
+                "name": s.name,
+                "latitude": s.latitude,
+                "longitude": s.longitude,
+            }
+            for s in sites[:limit]
+        ]
+        result = Result(
+            ok=True,
+            data={
+                "from": identifier,
+                "direction": direction,
+                "within_km": distance_km,
+                "locations": found,
+                "count": len(sites),
+            },
+        )
+        if len(sites) > limit:
+            result.note(
+                f"{len(sites)} locations were found and the nearest {limit} are listed; "
+                f"raise limit or reduce distance_km to change that"
+            )
+        return result
+
+    @_guarded
+    def get_basin(self, identifier: str) -> Result:
+        """The area draining to a point.
+
+        The polygon is held rather than returned, being a couple of thousand coordinate
+        pairs that answer a mapping question and no question an agent asks.
+        """
+        try:
+            basin = self.session.basin(identifier)
+        except NotOnTheNetwork:
+            return Result.failure(
+                ErrorCode.NO_DATA,
+                f"{identifier} is not indexed to the river network, so no basin can be "
+                f"delineated for it",
+                "Locations off the mapped hydrography have no basin. A gaged stream site "
+                "usually publishes a drainage area in its site record, which "
+                "describe_location returns.",
+            )
+
+        if basin is None:
+            return Result.failure(
+                ErrorCode.NO_DATA,
+                f"the network index delineated no basin for {identifier}",
+                "This happens at coastal and tidal locations, where there is no "
+                "contributing area to trace.",
+            )
+
+        self.session.record_derived(basin.area, f"basin area at {identifier}")
+        return Result(
+            ok=True,
+            data={
+                "location": identifier,
+                "area": basin.area,
+                "bounding_box": {
+                    "west": round(basin.bbox[0], 4),
+                    "south": round(basin.bbox[1], 4),
+                    "east": round(basin.bbox[2], 4),
+                    "north": round(basin.bbox[3], 4),
+                },
+                "polygon_vertices": basin.vertices,
+            },
+        ).note(
+            "The area is computed from the delineated polygon rather than published, and "
+            "differs from the drainage area in a site record, which is surveyed. Where "
+            "both exist the site record is the figure to quote."
+        )
 
     # Reference ----------------------------------------------------------------------
 

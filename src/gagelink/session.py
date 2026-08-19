@@ -22,6 +22,7 @@ from quantity_guard import session as quantity_ledger
 
 from . import __version__
 from .normalise import Location, location_from
+from .nldi import Basin, Network, NetworkSite
 from .nwps import Forecasts, Gauge
 from quantity_guard import Q
 
@@ -42,17 +43,20 @@ class Session:
         service: Service | None = None,
         *,
         forecasts: Forecasts | None = None,
+        network: Network | None = None,
         api_key: str | None = None,
         question: str = "",
     ) -> None:
         self.service = service if service is not None else Service(api_key=api_key)
         self.forecasts = forecasts if forecasts is not None else Forecasts()
+        self.network = network if network is not None else Network()
         self.question = question
         self.started_at = datetime.now(timezone.utc)
         self.retrievals: list[Retrieval] = []
         self.locations: dict[str, Location] = {}
         self.series: dict[str, dict[str, Any]] = {}
         self.gauges: dict[str, Gauge] = {}
+        self.basins: dict[str, Basin] = {}
         self.ledger = None
         self._stack: ExitStack | None = None
 
@@ -110,6 +114,27 @@ class Session:
         self.retrievals.append(retrieval)
         self.gauges[identifier] = gauge
         return gauge
+
+    def navigate(
+        self, identifier: str, direction: str, distance_km: float, target: str = "nwissite"
+    ) -> list[NetworkSite]:
+        """Features along the river from a starting point."""
+        sites, retrieval = self.network.navigate(
+            identifier, direction=direction, target=target, distance_km=distance_km
+        )
+        self.retrievals.append(retrieval)
+        return sites
+
+    def basin(self, identifier: str) -> Basin | None:
+        """The area draining to a point, delineated once per session."""
+        if identifier in self.basins:
+            return self.basins[identifier]
+
+        basin, retrieval = self.network.basin(identifier)
+        self.retrievals.append(retrieval)
+        if basin is not None:
+            self.basins[identifier] = basin
+        return basin
 
     # Provenance --------------------------------------------------------------------
 

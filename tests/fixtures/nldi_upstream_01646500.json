@@ -1,0 +1,533 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -77.2552593,
+     39.0381646
+    ]
+   },
+   "properties": {
+    "identifier": "USGS-01645300",
+    "navigation": "https://api.water.usgs.gov/nldi/linked-data/nwissite/USGS-01645300/navigation",
+    "name": "POTOMAC RIVER NEAR POTOMAC, MD",
+    "source": "nwissite",
+    "sourceName": "NWIS Surface Water Sites",
+    "comid": 4512660,
+    "type": "hydrolocation",
+    "uri": "https://waterdata.usgs.gov/monitoring-location/USGS-01645300",
+    "reachcode": "02070008001400",
+    "measure": 50.8527,
+    "mainstem": "https://geoconnex.us/ref/mainstems/2152216"
+   },
+   "id": "USGS-01645300"
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -77.2530556,
+     39.03777778
+    ]
+   },
+   "properties": {
+    "identifier": "USGS-01645295",
+    "navigation": "https://api.water.usgs.gov/nldi/linked-data/nwissite/USGS-01645295/navigation",
+    "name": "POTOMAC RIVER BELOW WATTS BRANCH NEAR POTOMAC, MD",
+    "source": "nwissite",
+    "sourceName": "NWIS Surface Water Sites",
+    "comid": 4512660,
+    "type": "hydrolocation",
+    "uri": "https://waterdata.usgs.gov/monitoring-location/USGS-01645295",
+    "reachcode": "02070008001400",
+    "measure": 3.9232,
+    "mainstem": "https://geoconnex.us/ref/mainstems/2152216"
+   },
+   "id": "USGS-01645295"
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -77.4744444,
+     39.1036111
+    ]
+   },
+   "properties": {
+    "identifier": "USGS-01643618",
+    "navigation": "https://api.water.usgs.gov/nldi/linked-data/nwissite/USGS-01643618/navigation",
+    "name": "POTOMAC RIVER AT EDWARDS FERRY RD NR LEESBURG, VA",
+    "source": "nwissite",
+    "sourceName": "NWIS Surface Water Sites",
+    "comid": 4507450,
+    "type": "hydrolocation",
+    "uri": "https://waterdata.usgs.gov/monitoring-location/USGS-01643618",
+    "reachcode": "02070008000079",
+    "measure": 20.5651,
+    "mainstem": "https://geoconnex.us/ref/mainstems/2152216"
+   },
+   "id": "USGS-01643618"
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -77.2436111,
+     39.01277778
+    ]
+   },
+   "properties": {
+    "identifier": "USGS-01645310",
+    "navigation": "https://api.water.usgs.gov/nldi/linked-data/nwissite/USGS-01645310/navigation",
+    "name": "POTOMAC RIVER NEAR GREAT FALLS, MD",
+    "source": "nwissite",
+    "sourceName": "NWIS Surface Water Sites",
+    "comid": 4507532,
+    "type": "hydrolocation",
+    "uri": "https://waterdata.usgs.gov/monitoring-location/USGS-01645310",
+    "reachcode": "02070008000008",
+    "measure": 41.9867,
+    "mainstem": "https://geoconnex.us/ref/mainstems/2152216"
+   },
+   "id": "USGS-01645310"
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -77.22888889,
+     38.98027778
+    ]
+   },
+   "properties": {
+    "identifier": "USGS-01646010",
+    "navigation": "https://api.water.usgs.gov/nldi/linked-data/nwissite/USGS-01646010/navigation",
+    "name": "POTOMAC RIVER AT CROPLEY, MD",
+    "source": "nwissite",
+    "sourceName": "NWIS Surface Water Sites",
+    "comid": 4512716,
+    "type": "hydrolocation",
+    "uri": "https://waterdata.usgs.gov/monitoring-location/USGS-01646010",
+    "reachcode": "02070008000006",
+    "measure": 83.2443,
+    "mainstem": "https://geoconnex.us/ref/mainstems/2152216"
+   },
+   "id": "USGS-01646010"
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -77.2141667,
+     38.97305556
+    ]
+   },
+   "properties": {
+    "identifier": "USGS-01646020",
+    "navigation": "https://api.water.usgs.gov/nldi/linked-data/nwissite/USGS-01646020/navigation",
+    "name": "POTOMAC RIVER NEAR CROPLEY, MD",
+    "source": "nwissite",
+    "sourceName": "NWIS Surface Water Sites",
+    "comid": 4512716,
+    "type": "hydrolocation",
+    "uri": "https://waterdata.usgs.gov/monitoring-location/USGS-01646020",
+    "reachcode": "02070008000006",
+    "measure": 30.2885,
+    "mainstem": "https://geoconnex.us/ref/mainstems/2152216"
+   },
+   "id": "USGS-01646020"
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -77.2475,
+     38.99055556
+    ]
+   },
+   "properties": {
+    "identifier": "USGS-01645520",
+    "navigation": "https://api.water.usgs.gov/nldi/linked-data/nwissite/USGS-01645520/navigation",
+    "name": "POTOMAC RIVER NEAR FAIRVIEW, VA",
+    "source": "nwissite",
+    "sourceName": "NWIS Surface Water Sites",
+    "comid": 4509250,
+    "type": "hydrolocation",
+    "uri": "https://waterdata.usgs.gov/monitoring-location/USGS-01645520",
+    "reachcode": "02070008001425",
+    "measure": 68.5957,
+    "mainstem": "https://geoconnex.us/ref/mainstems/2152216"
+   },
+   "id": "USGS-01645520"
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -77.2391667,
+     38.98055556
+    ]
+   },
+   "properties": {
+    "identifier": "USGS-01645525",
+    "navigation": "https://api.water.usgs.gov/nldi/linked-data/nwissite/USGS-01645525/navigation",
+    "name": "POTOMAC RIVER AT GLENDALE, VA",
+    "source": "nwissite",
+    "sourceName": "NWIS Surface Water Sites",
+    "comid": 4509250,
+    "type": "hydrolocation",
+    "uri": "https://waterdata.usgs.gov/monitoring-location/USGS-01645525",
+    "reachcode": "02070008001425",
+    "measure": 20.5257,
+    "mainstem": "https://geoconnex.us/ref/mainstems/2152216"
+   },
+   "id": "USGS-01645525"
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -77.1975,
+     38.96916667
+    ]
+   },
+   "properties": {
+    "identifier": "USGS-01646210",
+    "navigation": "https://api.water.usgs.gov/nldi/linked-data/nwissite/USGS-01646210/navigation",
+    "name": "POTOMAC RIVER AT CARDEROCK, MD",
+    "source": "nwissite",
+    "sourceName": "NWIS Surface Water Sites",
+    "comid": 25035061,
+    "type": "hydrolocation",
+    "uri": "https://waterdata.usgs.gov/monitoring-location/USGS-01646210",
+    "reachcode": "02070008001580",
+    "measure": 83.077,
+    "mainstem": "https://geoconnex.us/ref/mainstems/2152216"
+   },
+   "id": "USGS-01646210"
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -77.3930556,
+     39.06777778
+    ]
+   },
+   "properties": {
+    "identifier": "USGS-01644285",
+    "navigation": "https://api.water.usgs.gov/nldi/linked-data/nwissite/USGS-01644285/navigation",
+    "name": "POTOMAC RIVER NEAR SUGARLAND, MD",
+    "source": "nwissite",
+    "sourceName": "NWIS Surface Water Sites",
+    "comid": 4507502,
+    "type": "hydrolocation",
+    "uri": "https://waterdata.usgs.gov/monitoring-location/USGS-01644285",
+    "reachcode": "02070008001434",
+    "measure": 78.487,
+    "mainstem": "https://geoconnex.us/ref/mainstems/2152216"
+   },
+   "id": "USGS-01644285"
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -77.47125,
+     39.09863889
+    ]
+   },
+   "properties": {
+    "identifier": "USGS-01644148",
+    "navigation": "https://api.water.usgs.gov/nldi/linked-data/nwissite/USGS-01644148/navigation",
+    "name": "POTOMAC RIVER AT EDWARDS FERRY NEAR POOLESVILLE,MD",
+    "source": "nwissite",
+    "sourceName": "NWIS Surface Water Sites",
+    "comid": 4507454,
+    "type": "hydrolocation",
+    "uri": "https://waterdata.usgs.gov/monitoring-location/USGS-01644148",
+    "reachcode": "02070008001420",
+    "measure": 94.4327,
+    "mainstem": "https://geoconnex.us/ref/mainstems/2152216"
+   },
+   "id": "USGS-01644148"
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -77.2447222,
+     39.03055556
+    ]
+   },
+   "properties": {
+    "identifier": "USGS-01645305",
+    "navigation": "https://api.water.usgs.gov/nldi/linked-data/nwissite/USGS-01645305/navigation",
+    "name": "POTOMAC RIVER NEAR SHADY OAK, VA",
+    "source": "nwissite",
+    "sourceName": "NWIS Surface Water Sites",
+    "comid": 4507530,
+    "type": "hydrolocation",
+    "uri": "https://waterdata.usgs.gov/monitoring-location/USGS-01645305",
+    "reachcode": "02070008000008",
+    "measure": 82.5175,
+    "mainstem": "https://geoconnex.us/ref/mainstems/2152216"
+   },
+   "id": "USGS-01645305"
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -77.165,
+     38.97055556
+    ]
+   },
+   "properties": {
+    "identifier": "USGS-01646310",
+    "navigation": "https://api.water.usgs.gov/nldi/linked-data/nwissite/USGS-01646310/navigation",
+    "name": "POTOMAC RIVER AT CABIN JOHN, MD",
+    "source": "nwissite",
+    "sourceName": "NWIS Surface Water Sites",
+    "comid": 4509248,
+    "type": "hydrolocation",
+    "uri": "https://waterdata.usgs.gov/monitoring-location/USGS-01646310",
+    "reachcode": "02070008001576",
+    "measure": 76.6259,
+    "mainstem": "https://geoconnex.us/ref/mainstems/2152216"
+   },
+   "id": "USGS-01646310"
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -77.12763889,
+     38.94977778
+    ]
+   },
+   "properties": {
+    "identifier": "USGS-01646500",
+    "navigation": "https://api.water.usgs.gov/nldi/linked-data/nwissite/USGS-01646500/navigation",
+    "name": "POTOMAC RIVER NEAR WASH, DC LITTLE FALLS PUMP STA",
+    "source": "nwissite",
+    "sourceName": "NWIS Surface Water Sites",
+    "comid": 4512772,
+    "type": "hydrolocation",
+    "uri": "https://waterdata.usgs.gov/monitoring-location/USGS-01646500",
+    "reachcode": "02070008001579",
+    "measure": 31.913,
+    "mainstem": "https://geoconnex.us/ref/mainstems/2152216"
+   },
+   "id": "USGS-01646500"
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -77.12763889,
+     38.94977778
+    ]
+   },
+   "properties": {
+    "identifier": "USGS-01646502",
+    "navigation": "https://api.water.usgs.gov/nldi/linked-data/nwissite/USGS-01646502/navigation",
+    "name": "POTOMAC RIVER, ADJUSTED, NEAR WASH, DC",
+    "source": "nwissite",
+    "sourceName": "NWIS Surface Water Sites",
+    "comid": 4512772,
+    "type": "hydrolocation",
+    "uri": "https://waterdata.usgs.gov/monitoring-location/USGS-01646502",
+    "reachcode": "02070008001579",
+    "measure": 32.2617,
+    "mainstem": "https://geoconnex.us/ref/mainstems/2152216"
+   },
+   "id": "USGS-01646502"
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -77.1278056,
+     38.9494722
+    ]
+   },
+   "properties": {
+    "identifier": "USGS-01646508",
+    "navigation": "https://api.water.usgs.gov/nldi/linked-data/nwissite/USGS-01646508/navigation",
+    "name": "POTOMAC RIVER BACKUP STATION",
+    "source": "nwissite",
+    "sourceName": "NWIS Surface Water Sites",
+    "comid": 4512772,
+    "type": "hydrolocation",
+    "uri": "https://waterdata.usgs.gov/monitoring-location/USGS-01646508",
+    "reachcode": "02070008001579",
+    "measure": 32.2617,
+    "mainstem": "https://geoconnex.us/ref/mainstems/2152216"
+   },
+   "id": "USGS-01646508"
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -77.36027778,
+     39.0672222
+    ]
+   },
+   "properties": {
+    "identifier": "USGS-0164437050",
+    "navigation": "https://api.water.usgs.gov/nldi/linked-data/nwissite/USGS-0164437050/navigation",
+    "name": "POTOMAC RIVER NEAR SENECA, MD",
+    "source": "nwissite",
+    "sourceName": "NWIS Surface Water Sites",
+    "comid": 4507474,
+    "type": "hydrolocation",
+    "uri": "https://waterdata.usgs.gov/monitoring-location/USGS-0164437050",
+    "reachcode": "02070008001421",
+    "measure": 81.5235,
+    "mainstem": "https://geoconnex.us/ref/mainstems/2152216"
+   },
+   "id": "USGS-0164437050"
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -77.3372222,
+     39.06777778
+    ]
+   },
+   "properties": {
+    "identifier": "USGS-01645085",
+    "navigation": "https://api.water.usgs.gov/nldi/linked-data/nwissite/USGS-01645085/navigation",
+    "name": "POTOMAC RIVER AT SENECA, MD",
+    "source": "nwissite",
+    "sourceName": "NWIS Surface Water Sites",
+    "comid": 4507474,
+    "type": "hydrolocation",
+    "uri": "https://waterdata.usgs.gov/monitoring-location/USGS-01645085",
+    "reachcode": "02070008001421",
+    "measure": 0.0,
+    "mainstem": "https://geoconnex.us/ref/mainstems/2152216"
+   },
+   "id": "USGS-01645085"
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -77.1455556,
+     38.9661111
+    ]
+   },
+   "properties": {
+    "identifier": "USGS-01646400",
+    "navigation": "https://api.water.usgs.gov/nldi/linked-data/nwissite/USGS-01646400/navigation",
+    "name": "POTOMAC RIVER AT GLEN ECHO, MD",
+    "source": "nwissite",
+    "sourceName": "NWIS Surface Water Sites",
+    "comid": 25035049,
+    "type": "hydrolocation",
+    "uri": "https://waterdata.usgs.gov/monitoring-location/USGS-01646400",
+    "reachcode": "02070008001578",
+    "measure": 45.1787,
+    "mainstem": "https://geoconnex.us/ref/mainstems/2152216"
+   },
+   "id": "USGS-01646400"
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -77.5086111,
+     39.11944444
+    ]
+   },
+   "properties": {
+    "identifier": "USGS-01643611",
+    "navigation": "https://api.water.usgs.gov/nldi/linked-data/nwissite/USGS-01643611/navigation",
+    "name": "POTOMAC RIVER BL HARRISON ISLAND NR LEESBURG, VA",
+    "source": "nwissite",
+    "sourceName": "NWIS Surface Water Sites",
+    "comid": 4507448,
+    "type": "hydrolocation",
+    "uri": "https://waterdata.usgs.gov/monitoring-location/USGS-01643611",
+    "reachcode": "02070008000080",
+    "measure": 39.4766,
+    "mainstem": "https://geoconnex.us/ref/mainstems/2152216"
+   },
+   "id": "USGS-01643611"
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -77.5025,
+     39.115
+    ]
+   },
+   "properties": {
+    "identifier": "USGS-01643612",
+    "navigation": "https://api.water.usgs.gov/nldi/linked-data/nwissite/USGS-01643612/navigation",
+    "name": "POTOMAC RIVER NEAR LEESBURG, VA",
+    "source": "nwissite",
+    "sourceName": "NWIS Surface Water Sites",
+    "comid": 4507448,
+    "type": "hydrolocation",
+    "uri": "https://waterdata.usgs.gov/monitoring-location/USGS-01643612",
+    "reachcode": "02070008000080",
+    "measure": 21.4593,
+    "mainstem": "https://geoconnex.us/ref/mainstems/2152216"
+   },
+   "id": "USGS-01643612"
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -77.5158333,
+     39.1372222
+    ]
+   },
+   "properties": {
+    "identifier": "USGS-0164361050",
+    "navigation": "https://api.water.usgs.gov/nldi/linked-data/nwissite/USGS-0164361050/navigation",
+    "name": "POTOMAC RIVER NEAR CLARKS GAP, VA",
+    "source": "nwissite",
+    "sourceName": "NWIS Surface Water Sites",
+    "comid": 4507448,
+    "type": "hydrolocation",
+    "uri": "https://waterdata.usgs.gov/monitoring-location/USGS-0164361050",
+    "reachcode": "02070008000080",
+    "measure": 74.0257,
+    "mainstem": "https://geoconnex.us/ref/mainstems/2152216"
+   },
+   "id": "USGS-0164361050"
+  }
+ ]
+}
