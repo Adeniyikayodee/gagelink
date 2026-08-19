@@ -1,0 +1,46 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "gagelink"
+dynamic = ["version"]
+description = "Hydrology retrieval for AI agents: typed quantities, record quality, and replayable provenance over the USGS Water Data APIs."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+keywords = ["hydrology", "usgs", "water", "llm", "agents", "mcp", "reproducibility"]
+authors = [{ name = "Kayode Adeniyi" }]
+dependencies = ["quantity-guard>=0.8"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Hydrology",
+    "Typing :: Typed",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.urls]
+Homepage = "https://github.com/Adeniyikayodee/gagelink"
+Issues = "https://github.com/Adeniyikayodee/gagelink/issues"
+
+[tool.hatch.version]
+path = "src/gagelink/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gagelink"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-m 'not live'"
+markers = ["live: hits the USGS service; excluded by default"]

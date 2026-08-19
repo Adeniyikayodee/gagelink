@@ -1,0 +1,48 @@
+name: release
+
+# Publishes to PyPI when a version tag is pushed. Authentication is by trusted
+# publishing, so no API token is stored here; the one-time setup is on PyPI under
+# Publishing, naming this repository and the workflow file below.
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build twine
+      # The tag is the release; the version is read from the module, so this is the one
+      # place the two can still disagree. Caught here rather than on PyPI, where the
+      # filename is permanent.
+      - name: tag matches the packaged version
+        run: |
+          tagged="${GITHUB_REF_NAME#v}"
+          declared=$(python -c "import re,pathlib; print(re.search(r'__version__ = \"([^\"]+)\"', pathlib.Path('src/gagelink/__init__.py').read_text()).group(1))")
+          if [ "$tagged" != "$declared" ]; then
+            echo "tag $GITHUB_REF_NAME does not match __version__ $declared" >&2
+            exit 1
+          fi
+      - run: python -m build
+      - run: twine check dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1

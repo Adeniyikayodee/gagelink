@@ -1,0 +1,95 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "USGS-07374000",
+    "agency_code": "USGS",
+    "agency_name": "U.S. Geological Survey",
+    "monitoring_location_number": "07374000",
+    "monitoring_location_name": "Mississippi River at Baton Rouge, LA",
+    "district_code": "22",
+    "country_code": "US",
+    "country_name": "United States of America",
+    "state_code": "22",
+    "state_name": "Louisiana",
+    "county_code": "121",
+    "county_name": "West Baton Rouge Parish",
+    "minor_civil_division_code": null,
+    "site_type_code": "ST",
+    "site_type": "Stream",
+    "hydrologic_unit_code": "080701000104",
+    "basin_code": null,
+    "altitude": 0.0,
+    "altitude_accuracy": 0.01,
+    "altitude_method_code": "L",
+    "altitude_method_name": "Level or other surveyed method.",
+    "vertical_datum": "NAVD88",
+    "vertical_datum_name": "North American Vertical Datum of 1988",
+    "horizontal_positional_accuracy_code": "S",
+    "horizontal_positional_accuracy": "Accurate to + or - 1 sec.",
+    "horizontal_position_method_code": "M",
+    "horizontal_position_method_name": "Interpolated from map",
+    "original_horizontal_datum": "NAD83",
+    "original_horizontal_datum_name": "North American Datum of 1983",
+    "drainage_area": 1125810.0,
+    "contributing_drainage_area": null,
+    "time_zone_abbreviation": "CST",
+    "uses_daylight_savings": "Y",
+    "construction_date": null,
+    "aquifer_code": null,
+    "national_aquifer_code": null,
+    "aquifer_type_code": null,
+    "well_constructed_depth": null,
+    "hole_constructed_depth": null,
+    "depth_source_code": null,
+    "revision_note": "&ltspan style=\"font-size: 12pt; font-family: 'Segoe UI', sans-serif; line-height: 115%;\"&gtpH daily mean published in error for Sep 30, 2004 - Nov. 23, 2015.&lt/span&gt",
+    "revision_created": "2025-09-29T17:23:20.610000+00:00",
+    "revision_modified": "2025-09-29T17:23:20.610000+00:00"
+   },
+   "id": "USGS-07374000",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -91.1915555555556,
+     30.4456666666667
+    ]
+   }
+  }
+ ],
+ "numberReturned": 1,
+ "links": [
+  {
+   "type": "application/geo+json",
+   "rel": "self",
+   "title": "This document as GeoJSON",
+   "href": "https://api.waterdata.usgs.gov/ogcapi/v0/collections/monitoring-locations/items?f=json&id=USGS-07374000"
+  },
+  {
+   "rel": "alternate",
+   "type": "application/ld+json",
+   "title": "This document as RDF (JSON-LD)",
+   "href": "https://api.waterdata.usgs.gov/ogcapi/v0/collections/monitoring-locations/items?f=jsonld&id=USGS-07374000"
+  },
+  {
+   "type": "text/html",
+   "rel": "alternate",
+   "title": "This document as HTML",
+   "href": "https://api.waterdata.usgs.gov/ogcapi/v0/collections/monitoring-locations/items?f=html&id=USGS-07374000"
+  },
+  {
+   "type": "text/csv; charset=utf-8",
+   "rel": "alternate",
+   "title": "This document as CSV",
+   "href": "https://api.waterdata.usgs.gov/ogcapi/v0/collections/monitoring-locations/items?f=csv&id=USGS-07374000"
+  },
+  {
+   "type": "application/json",
+   "title": "Monitoring locations",
+   "rel": "collection",
+   "href": "https://api.waterdata.usgs.gov/ogcapi/v0/collections/monitoring-locations"
+  }
+ ],
+ "timeStamp": "2026-08-19T10:09:37.734971Z"
+}
