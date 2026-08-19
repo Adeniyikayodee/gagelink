@@ -105,6 +105,7 @@ QUALIFIERS: dict[str, str] = {
     "DRY": "estimated",
     "ZFL": "estimated",
     "EST": "estimated",
+    "ESTIMATED": "estimated",  # observed live on revised daily record
     # Gage height not measured on the station's current datum, observed live on peak
     # record. It is the datum hazard arriving as a qualifier rather than as a frame, and
     # nothing downstream would otherwise see it, so it grades down.

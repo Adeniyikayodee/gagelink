@@ -4,8 +4,7 @@ Hydrology retrieval for AI agents. Values arrive carrying their unit, the datum 
 measured from, their timezone, and whether the record is provisional or approved, and every
 request is recorded in a form that lets a session be re-run and its differences attributed.
 
-**Pre-alpha.** Transport, normalisation into typed quantities, the tool surface, and the
-MCP server are present. Replay is not. The API will change.
+**Pre-alpha.** The API will change.
 
 ```bash
 pip install gagelink
@@ -224,6 +223,58 @@ has no zone to choose or to get wrong. It agrees with the drainage area USGS pub
 the one station where both figures exist to 0.06%, and the result says it is computed rather
 than published, so it is not quoted against a surveyed figure as though the two were the
 same.
+
+## Replay
+
+Hydrology reproduces at 1.6% in the tested literature. The usual explanation is that data
+and code were not published, and it hides the more interesting failure: a published pipeline
+against a live service does not reproduce either, because the service revised the record
+underneath it. Provisional discharge becomes approved discharge and the number moves.
+
+A session saves a bundle of its manifest and the response bodies it saw. Replaying it runs
+in three modes, and the distinction between them is the point.
+
+| mode | procedure | isolates |
+|---|---|---|
+| `offline` | recompute from the archived bodies | code and library change |
+| `strict` | re-fetch, require identical responses | any drift at all |
+| `revision_aware` | re-fetch, diff, ask the service to account for each difference | data revision |
+
+```python
+with Session(question="what was the discharge in mid May 2021?") as work:
+    Toolkit(work).get_series("USGS-02344872", "00060", "2021-05-16", "2021-05-20")
+    work.save("bundle.json")
+```
+
+```bash
+gagelink-replay bundle.json --mode strict
+gagelink-replay bundle.json --mode revision_aware
+```
+
+The same bundle, the same re-fetch, and two different verdicts:
+
+```
+strict replay: changed
+  changed      daily
+      [changed] USGS-02344872 00060 at 2021-05-16: 702.1 -> 826.0 ft^3/s
+
+revision_aware replay: reproduced
+  changed      daily
+      [revised] USGS-02344872 00060 at 2021-05-16: 702.1 -> 826.0 ft^3/s,
+                Revisions: Discharge for the period May 16, 2021 to Oct. 27, 2021,
+                was revised on Aug. 16, 2024, based on changes to the estimated discharge.
+```
+
+A result that changed because the agency revised 400 provisional values is a different fact
+about the science than one that changed because the code changed, and the two are otherwise
+indistinguishable. The revision record comes from the service's own `time-series-revisions`
+collection, joined on the time series identifier the reading already carries, so the
+attribution is a lookup rather than a guess. A difference with no published revision behind
+it stays reported as unexplained, which is what keeps the check from being vacuous.
+
+Bodies are verified against their hashes before anything is compared. A bundle whose archive
+does not match is refused rather than replayed, since every verdict rests on the archive
+being what the session actually saw.
 
 ## API keys and rate limits
 

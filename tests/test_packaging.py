@@ -29,3 +29,8 @@ def test_the_mcp_entry_point_is_declared():
     """A server nobody can start is not a server; the console script is how it is run."""
     pyproject = (Path(__file__).resolve().parent.parent / "pyproject.toml").read_text()
     assert 'gagelink-mcp = "gagelink.server:main"' in pyproject
+
+
+def test_the_replay_entry_point_is_declared():
+    pyproject = (Path(__file__).resolve().parent.parent / "pyproject.toml").read_text()
+    assert 'gagelink-replay = "gagelink.replay:main"' in pyproject

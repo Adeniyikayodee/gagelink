@@ -29,6 +29,7 @@ classifiers = [
 
 [project.scripts]
 gagelink-mcp = "gagelink.server:main"
+gagelink-replay = "gagelink.replay:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]

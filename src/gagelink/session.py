@@ -13,7 +13,9 @@ a final answer can be audited against both.
 
 from __future__ import annotations
 
+import json
 from contextlib import ExitStack
+from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any
 
@@ -53,6 +55,8 @@ class Session:
         self.question = question
         self.started_at = datetime.now(timezone.utc)
         self.retrievals: list[Retrieval] = []
+        #: Response bodies by hash, so a replay can recompute from what was actually seen.
+        self.archive: dict[str, str] = {}
         self.locations: dict[str, Location] = {}
         self.series: dict[str, dict[str, Any]] = {}
         self.gauges: dict[str, Gauge] = {}
@@ -75,8 +79,19 @@ class Session:
     def items(self, collection: str, **params: Any) -> dict[str, Any]:
         """Fetch a page and keep the record of having fetched it."""
         page, retrieval = self.service.items(collection, **params)
-        self.retrievals.append(retrieval)
+        self._keep(retrieval)
         return page
+
+    def _keep(self, retrieval: Retrieval) -> None:
+        """Record a retrieval and archive the body it returned.
+
+        The archive is what separates a replay from a fresh run. Without the original
+        bodies a re-run can only be compared against today's data, which cannot tell a
+        changed answer caused by revised record from one caused by changed code.
+        """
+        self.retrievals.append(retrieval)
+        if retrieval.body is not None:
+            self.archive.setdefault(retrieval.sha256, retrieval.body)
 
     def location(self, identifier: str) -> Location | None:
         """A monitoring location, fetched once per session and registered on arrival.
@@ -111,7 +126,7 @@ class Session:
 
         number = identifier.split("-")[-1]
         gauge, retrieval = self.forecasts.gauge(number)
-        self.retrievals.append(retrieval)
+        self._keep(retrieval)
         self.gauges[identifier] = gauge
         return gauge
 
@@ -122,7 +137,7 @@ class Session:
         sites, retrieval = self.network.navigate(
             identifier, direction=direction, target=target, distance_km=distance_km
         )
-        self.retrievals.append(retrieval)
+        self._keep(retrieval)
         return sites
 
     def basin(self, identifier: str) -> Basin | None:
@@ -131,7 +146,7 @@ class Session:
             return self.basins[identifier]
 
         basin, retrieval = self.network.basin(identifier)
-        self.retrievals.append(retrieval)
+        self._keep(retrieval)
         if basin is not None:
             self.basins[identifier] = basin
         return basin
@@ -191,6 +206,21 @@ class Session:
         if self.ledger is not None:
             manifest["quantities"] = self.ledger.manifest()["quantities"]
         return manifest
+
+    def bundle(self) -> dict[str, Any]:
+        """The manifest together with the bodies it refers to.
+
+        Kept as one object because the two are useless apart: a manifest without the
+        bodies cannot be replayed offline, and bodies without the manifest do not say
+        what was asked for or what was made of them.
+        """
+        return {"manifest": self.manifest(), "archive": dict(self.archive)}
+
+    def save(self, path: str | Path) -> Path:
+        """Write the bundle where a later replay can find it."""
+        destination = Path(path)
+        destination.write_text(json.dumps(self.bundle(), indent=1))
+        return destination
 
     def audit(self, answer: str) -> Any:
         """Classify every number in an answer against what was actually retrieved.

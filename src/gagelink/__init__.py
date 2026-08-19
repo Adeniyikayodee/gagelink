@@ -9,8 +9,7 @@ This package retrieves against the USGS Water Data APIs and keeps that metadata 
 using quantity-guard to enforce it at the tool boundary, and records each request in a form
 that lets a session be re-run and its differences attributed.
 
-Pre-alpha. Transport, normalisation, the tool surface, and the MCP server are
-present. Replay is not.
+Pre-alpha, and the API will change.
 """
 
 #: Single source of truth for the version; pyproject reads it from here, so the packaged
@@ -31,6 +30,7 @@ from .normalise import (
 )
 from .nldi import Basin, Network, NetworkSite, NotOnTheNetwork, ring_area
 from .nwps import Forecasts, Gauge, GaugeNotFound, Threshold
+from .replay import OFFLINE, REVISION_AWARE, STRICT, ReplayReport, replay
 from .results import ErrorCode, Result
 from .server import Server, serve_stdio
 from .session import Session
@@ -52,6 +52,11 @@ from .service import (
 __all__ = [
     "BASE_URL",
     "ErrorCode",
+    "OFFLINE",
+    "REVISION_AWARE",
+    "STRICT",
+    "ReplayReport",
+    "replay",
     "Basin",
     "Forecasts",
     "Network",

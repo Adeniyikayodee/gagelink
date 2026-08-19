@@ -147,6 +147,11 @@ class Retrieval:
     size: int
     quota: Quota = field(default=Quota())
     from_cache: bool = False
+    #: The response body, kept so a session can be replayed against what it actually saw
+    #: rather than against what the service holds today. Deliberately absent from
+    #: ``record()``, since a manifest carrying every body would be unreadable and the hash
+    #: is what a comparison needs.
+    body: str | None = None
 
     @classmethod
     def of(
@@ -175,6 +180,7 @@ class Retrieval:
             size=len(body),
             quota=quota,
             from_cache=from_cache,
+            body=body,
         )
 
     def record(self) -> dict[str, Any]:

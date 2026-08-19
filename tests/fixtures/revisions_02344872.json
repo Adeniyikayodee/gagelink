@@ -1,0 +1,78 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "00008898-2557-4811-96b1-ecf379a04d83",
+    "monitoring_location_id": "USGS-02344872",
+    "time_series_id": "25ee465421c94de3af99233795b13c76",
+    "revision_note": "Revisions: Discharge for the period May 16, 2021 to Oct. 27, 2021, was revised on Aug. 16, 2024, based on changes to the estimated discharge.",
+    "begin": "2021-05-16T22:00:00+00:00",
+    "end": "2021-10-27T08:45:00+00:00"
+   },
+   "id": "00008898-2557-4811-96b1-ecf379a04d83",
+   "geometry": null
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "51eddbba-654a-499d-8001-c54f8662bed8",
+    "monitoring_location_id": "USGS-02344872",
+    "time_series_id": "72207ced419d4bb1ad825eafa5aa21cb",
+    "revision_note": "Revisions: Discharge for the period May 16, 2021 to Oct. 27, 2021, was revised on Aug. 16, 2024, based on changes to the estimated discharge.",
+    "begin": "2021-05-16T22:00:00+00:00",
+    "end": "2021-10-27T08:45:00+00:00"
+   },
+   "id": "51eddbba-654a-499d-8001-c54f8662bed8",
+   "geometry": null
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "8743cecd-e0ee-4e63-9b4a-9c0b55bc7e14",
+    "monitoring_location_id": "USGS-02344872",
+    "time_series_id": "4a77d09cd8a8438d92bf584fb9293c9b",
+    "revision_note": "Revisions: Discharge for the period May 16, 2021 to Oct. 27, 2021, was revised on Aug. 16, 2024, based on changes to the estimated discharge.",
+    "begin": "2021-05-16T22:00:00+00:00",
+    "end": "2021-10-27T08:45:00+00:00"
+   },
+   "id": "8743cecd-e0ee-4e63-9b4a-9c0b55bc7e14",
+   "geometry": null
+  }
+ ],
+ "numberReturned": 3,
+ "links": [
+  {
+   "type": "application/geo+json",
+   "rel": "self",
+   "title": "This document as GeoJSON",
+   "href": "https://api.waterdata.usgs.gov/ogcapi/v0/collections/time-series-revisions/items?f=json&limit=20&monitoring_location_id=USGS-02344872"
+  },
+  {
+   "rel": "alternate",
+   "type": "application/ld+json",
+   "title": "This document as RDF (JSON-LD)",
+   "href": "https://api.waterdata.usgs.gov/ogcapi/v0/collections/time-series-revisions/items?f=jsonld&limit=20&monitoring_location_id=USGS-02344872"
+  },
+  {
+   "type": "text/html",
+   "rel": "alternate",
+   "title": "This document as HTML",
+   "href": "https://api.waterdata.usgs.gov/ogcapi/v0/collections/time-series-revisions/items?f=html&limit=20&monitoring_location_id=USGS-02344872"
+  },
+  {
+   "type": "text/csv; charset=utf-8",
+   "rel": "alternate",
+   "title": "This document as CSV",
+   "href": "https://api.waterdata.usgs.gov/ogcapi/v0/collections/time-series-revisions/items?f=csv&limit=20&monitoring_location_id=USGS-02344872"
+  },
+  {
+   "type": "application/json",
+   "title": "Time series revisions",
+   "rel": "collection",
+   "href": "https://api.waterdata.usgs.gov/ogcapi/v0/collections/time-series-revisions"
+  }
+ ],
+ "timeStamp": "2026-08-19T13:14:50.820242Z"
+}
