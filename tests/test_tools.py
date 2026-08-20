@@ -276,3 +276,19 @@ def test_a_complete_listing_makes_no_such_claim():
     with Session(service=Service(fetch=fetch)) as work:
         notes = " ".join(Toolkit(work).get_latest("USGS-07374000").to_dict().get("notes", []))
     assert "partial" not in notes
+
+
+def test_a_parameter_is_found_by_description_rather_than_by_the_services_own_name():
+    """The service ignores a text query silently, answering 200 with the first rows of
+    the collection, and its exact names are not guessable: specific conductance is
+    published as 'Specific cond at 25C'. Neither is usable as an interface."""
+    with Session(service=Service(fetch=serving())) as work:
+        kit = Toolkit(work)
+        found = kit.lookup_parameter("conductance").to_dict()["data"]["parameters"]
+        assert found[0]["parameter_code"] == "00095"
+
+        assert kit.lookup_parameter("00060").to_dict()["data"]["parameter_code"] == "00060"
+
+        missing = kit.lookup_parameter("sausages")
+        assert missing.error == ErrorCode.NO_DATA
+        assert "not searchable" in missing.repair

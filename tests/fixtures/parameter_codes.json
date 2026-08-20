@@ -1,0 +1,346 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "00060",
+    "parameter_name": "Discharge",
+    "unit_of_measure": "ft3/s",
+    "parameter_group_code": "PHY",
+    "parameter_description": "Discharge, cubic feet per second",
+    "medium": "Water",
+    "statistical_basis": "Mean",
+    "time_basis": "1 Day",
+    "weight_basis": null,
+    "particle_size_basis": null,
+    "sample_fraction": null,
+    "temperature_basis": null,
+    "epa_equivalence": "Not checked"
+   },
+   "id": "00060",
+   "geometry": null
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "00065",
+    "parameter_name": "Gage height",
+    "unit_of_measure": "ft",
+    "parameter_group_code": "PHY",
+    "parameter_description": "Gage height, feet",
+    "medium": null,
+    "statistical_basis": null,
+    "time_basis": null,
+    "weight_basis": null,
+    "particle_size_basis": null,
+    "sample_fraction": null,
+    "temperature_basis": null,
+    "epa_equivalence": "Agree"
+   },
+   "id": "00065",
+   "geometry": null
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "00010",
+    "parameter_name": "Temperature, water",
+    "unit_of_measure": "deg C",
+    "parameter_group_code": "PHY",
+    "parameter_description": "Temperature, water, degrees Celsius",
+    "medium": "Water",
+    "statistical_basis": null,
+    "time_basis": null,
+    "weight_basis": null,
+    "particle_size_basis": null,
+    "sample_fraction": null,
+    "temperature_basis": null,
+    "epa_equivalence": "Agree"
+   },
+   "id": "00010",
+   "geometry": null
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "00095",
+    "parameter_name": "Specific cond at 25C",
+    "unit_of_measure": "uS/cm @25C",
+    "parameter_group_code": "PHY",
+    "parameter_description": "Specific conductance, water, unfiltered, microsiemens per centimeter at 25 degrees Celsius",
+    "medium": "Water",
+    "statistical_basis": null,
+    "time_basis": null,
+    "weight_basis": null,
+    "particle_size_basis": null,
+    "sample_fraction": "Total",
+    "temperature_basis": "25 deg C",
+    "epa_equivalence": "Agree"
+   },
+   "id": "00095",
+   "geometry": null
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "00300",
+    "parameter_name": "Dissolved oxygen",
+    "unit_of_measure": "mg/l",
+    "parameter_group_code": "INN",
+    "parameter_description": "Dissolved oxygen, water, unfiltered, milligrams per liter",
+    "medium": "Water",
+    "statistical_basis": null,
+    "time_basis": null,
+    "weight_basis": null,
+    "particle_size_basis": null,
+    "sample_fraction": "Dissolved",
+    "temperature_basis": null,
+    "epa_equivalence": "Agree"
+   },
+   "id": "00300",
+   "geometry": null
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "00400",
+    "parameter_name": "pH",
+    "unit_of_measure": "std units",
+    "parameter_group_code": "PHY",
+    "parameter_description": "pH, water, unfiltered, field, standard units",
+    "medium": "Water",
+    "statistical_basis": null,
+    "time_basis": null,
+    "weight_basis": null,
+    "particle_size_basis": null,
+    "sample_fraction": "Total",
+    "temperature_basis": null,
+    "epa_equivalence": "Agree"
+   },
+   "id": "00400",
+   "geometry": null
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "63160",
+    "parameter_name": "Stream level, NAVD88",
+    "unit_of_measure": "ft",
+    "parameter_group_code": "PHY",
+    "parameter_description": "Stream water level elevation above NAVD 1988, in feet",
+    "medium": "Water",
+    "statistical_basis": null,
+    "time_basis": null,
+    "weight_basis": null,
+    "particle_size_basis": null,
+    "sample_fraction": null,
+    "temperature_basis": null,
+    "epa_equivalence": "USGS use and no use by EPA"
+   },
+   "id": "63160",
+   "geometry": null
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "63680",
+    "parameter_name": "Turbidity, Form Neph",
+    "unit_of_measure": "FNU",
+    "parameter_group_code": "PHY",
+    "parameter_description": "Turbidity, water, unfiltered, monochrome near infra-red LED light, 780-900 nm, detection angle 90 +-2.5 degrees, formazin nephelometric units (FNU)",
+    "medium": "Water",
+    "statistical_basis": null,
+    "time_basis": null,
+    "weight_basis": null,
+    "particle_size_basis": null,
+    "sample_fraction": "Total",
+    "temperature_basis": null,
+    "epa_equivalence": "USGS use and no use by EPA"
+   },
+   "id": "63680",
+   "geometry": null
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "99133",
+    "parameter_name": "NO3+NO2,water,insitu",
+    "unit_of_measure": "mg/l as N",
+    "parameter_group_code": "NUT",
+    "parameter_description": "Nitrate plus nitrite, water, in situ, milligrams per liter as nitrogen",
+    "medium": "Water",
+    "statistical_basis": null,
+    "time_basis": null,
+    "weight_basis": null,
+    "particle_size_basis": null,
+    "sample_fraction": null,
+    "temperature_basis": null,
+    "epa_equivalence": "Not checked"
+   },
+   "id": "99133",
+   "geometry": null
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "62614",
+    "parameter_name": "Elevation, lake/res, NGVD29",
+    "unit_of_measure": "ft",
+    "parameter_group_code": "PHY",
+    "parameter_description": "Lake or reservoir water surface elevation above NGVD 1929, feet",
+    "medium": "Water",
+    "statistical_basis": null,
+    "time_basis": null,
+    "weight_basis": null,
+    "particle_size_basis": null,
+    "sample_fraction": null,
+    "temperature_basis": null,
+    "epa_equivalence": "USGS use and no use by EPA"
+   },
+   "id": "62614",
+   "geometry": null
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "72019",
+    "parameter_name": "Water level, depth LSD",
+    "unit_of_measure": "ft",
+    "parameter_group_code": "PHY",
+    "parameter_description": "Depth to water level, feet below land surface",
+    "medium": "Water",
+    "statistical_basis": null,
+    "time_basis": null,
+    "weight_basis": null,
+    "particle_size_basis": null,
+    "sample_fraction": null,
+    "temperature_basis": null,
+    "epa_equivalence": "Agree"
+   },
+   "id": "72019",
+   "geometry": null
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "30208",
+    "parameter_name": "Discharge",
+    "unit_of_measure": "m3/sec",
+    "parameter_group_code": "PHY",
+    "parameter_description": "Discharge, cubic meters per second",
+    "medium": "Water",
+    "statistical_basis": "Mean",
+    "time_basis": "1 Day",
+    "weight_basis": null,
+    "particle_size_basis": null,
+    "sample_fraction": null,
+    "temperature_basis": null,
+    "epa_equivalence": "Agree"
+   },
+   "id": "30208",
+   "geometry": null
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "50042",
+    "parameter_name": "Discharge",
+    "unit_of_measure": "gal/min",
+    "parameter_group_code": "PHY",
+    "parameter_description": "Discharge, gallons per minute",
+    "medium": "Water",
+    "statistical_basis": null,
+    "time_basis": null,
+    "weight_basis": null,
+    "particle_size_basis": null,
+    "sample_fraction": null,
+    "temperature_basis": null,
+    "epa_equivalence": "Agree"
+   },
+   "id": "50042",
+   "geometry": null
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "72243",
+    "parameter_name": "Discharge",
+    "unit_of_measure": "ft3/day",
+    "parameter_group_code": "PHY",
+    "parameter_description": "Discharge, cubic feet per day",
+    "medium": "Water",
+    "statistical_basis": null,
+    "time_basis": null,
+    "weight_basis": null,
+    "particle_size_basis": null,
+    "sample_fraction": null,
+    "temperature_basis": null,
+    "epa_equivalence": "Not checked"
+   },
+   "id": "72243",
+   "geometry": null
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "99060",
+    "parameter_name": "Discharge",
+    "unit_of_measure": "m3/sec",
+    "parameter_group_code": "PHY",
+    "parameter_description": "Discharge, cubic meters per second",
+    "medium": "Water",
+    "statistical_basis": "Mean",
+    "time_basis": "1 Day",
+    "weight_basis": null,
+    "particle_size_basis": null,
+    "sample_fraction": null,
+    "temperature_basis": null,
+    "epa_equivalence": "USGS use and no use by EPA"
+   },
+   "id": "99060",
+   "geometry": null
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "00070",
+    "parameter_name": "Turbidity",
+    "unit_of_measure": "JTU",
+    "parameter_group_code": "PHY",
+    "parameter_description": "Turbidity, water, unfiltered, Jackson Turbidity Units",
+    "medium": "Water",
+    "statistical_basis": null,
+    "time_basis": null,
+    "weight_basis": null,
+    "particle_size_basis": null,
+    "sample_fraction": "Total",
+    "temperature_basis": null,
+    "epa_equivalence": "Agree"
+   },
+   "id": "00070",
+   "geometry": null
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "00076",
+    "parameter_name": "Turbidity",
+    "unit_of_measure": "NTU",
+    "parameter_group_code": "PHY",
+    "parameter_description": "Turbidity, water, unfiltered, nephelometric turbidity units",
+    "medium": "Water",
+    "statistical_basis": null,
+    "time_basis": null,
+    "weight_basis": null,
+    "particle_size_basis": null,
+    "sample_fraction": "Total",
+    "temperature_basis": null,
+    "epa_equivalence": "Not agree"
+   },
+   "id": "00076",
+   "geometry": null
+  }
+ ],
+ "numberReturned": 17
+}

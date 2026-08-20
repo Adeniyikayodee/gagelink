@@ -108,8 +108,10 @@ class Gauge:
     thresholds: tuple[Threshold, ...] = ()
     observed: Q | None = None
     observed_at: datetime | None = None
+    observed_flow: Q | None = None
     forecast: Q | None = None
     forecast_at: datetime | None = None
+    forecast_flow: Q | None = None
     observed_category: str | None = None
     forecast_category: str | None = None
 
@@ -162,7 +164,7 @@ def gauge_from(payload: Mapping[str, Any]) -> Gauge:
             description=f"Stage datum at NWPS gauge {payload.get('lid')}, offset unpublished",
         )
     stage_unit = flood.get("stageUnits") or "ft"
-    flow_unit = flood.get("flowUnits") or "cfs"
+    flow_unit_default = flood.get("flowUnits") or "cfs"
 
     thresholds = []
     for name in CATEGORY_ORDER:
@@ -175,22 +177,30 @@ def gauge_from(payload: Mapping[str, Any]) -> Gauge:
             Threshold(
                 name=name,
                 stage=None if stage is None else Q(stage, stage_unit, datum=datum),
-                flow=None if flow is None else Q(flow, flow_unit),
+                flow=None if flow is None else Q(flow, flow_unit_default),
             )
         )
 
-    def reading(block: Mapping[str, Any]) -> tuple[Q | None, datetime | None]:
+    def reading(
+        block: Mapping[str, Any],
+    ) -> tuple[Q | None, datetime | None, Q | None]:
         value = _measured(block.get("primary"))
         moment = block.get("validTime")
+        # The secondary value is a flow, and it is published in kcfs here while the flood
+        # categories in the same response are in cfs. Both are carried as the service
+        # wrote them, so the difference is visible rather than resolved silently.
+        flow = _measured(block.get("secondary"))
+        flow_unit = block.get("secondaryUnit") or flow_unit_default
         return (
             None
             if value is None
             else Q(value, block.get("primaryUnit") or stage_unit, datum=datum),
             None if not moment else datetime.fromisoformat(str(moment).replace("Z", "+00:00")),
+            None if flow is None else Q(flow, flow_unit),
         )
 
-    observed, observed_at = reading(status.get("observed") or {})
-    forecast, forecast_at = reading(status.get("forecast") or {})
+    observed, observed_at, observed_flow = reading(status.get("observed") or {})
+    forecast, forecast_at, forecast_flow = reading(status.get("forecast") or {})
 
     return Gauge(
         lid=str(payload.get("lid") or ""),
@@ -203,8 +213,10 @@ def gauge_from(payload: Mapping[str, Any]) -> Gauge:
         thresholds=tuple(thresholds),
         observed=observed,
         observed_at=observed_at,
+        observed_flow=observed_flow,
         forecast=forecast,
         forecast_at=forecast_at,
+        forecast_flow=forecast_flow,
         observed_category=(status.get("observed") or {}).get("floodCategory"),
         forecast_category=(status.get("forecast") or {}).get("floodCategory"),
     )

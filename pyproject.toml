@@ -32,7 +32,7 @@ gagelink-mcp = "gagelink.server:main"
 gagelink-replay = "gagelink.replay:main"
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "certifi>=2024.0"]
 
 [project.urls]
 Homepage = "https://github.com/Adeniyikayodee/gagelink"
@@ -46,5 +46,8 @@ packages = ["src/gagelink"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The benchmark is not part of the wheel, so its package has to be importable from the
+# repository root for the tests that check its ground truth.
+pythonpath = ["."]
 addopts = "-m 'not live'"
 markers = ["live: hits the USGS service; excluded by default"]

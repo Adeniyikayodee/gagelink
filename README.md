@@ -276,6 +276,44 @@ Bodies are verified against their hashes before anything is compared. A bundle w
 does not match is refused rather than replayed, since every verdict rests on the archive
 being what the session actually saw.
 
+## waterbench
+
+`bench/` is a benchmark measuring what the toolkit is worth to a model, over nine tasks at
+one station covering nine hazards, every one of them observed in a live service payload
+while the package was built.
+
+Three conditions are compared on identical data, differing only in the interface between
+the model and the bytes:
+
+| condition | what the model gets |
+|---|---|
+| `http_only` | one fetch tool returning the service's own JSON, which is what a developer has today |
+| `toolkit_plain` | the eleven tools with results stripped to bare magnitudes and the notes removed |
+| `toolkit` | the tools as they are, with units, datums, quality, staleness, and the notes |
+
+The middle condition is what makes the measurement worth taking. Without it, a difference
+between the first and the last would only show that structured retrieval beats raw JSON,
+which nobody doubts. The difference between the last two is what the metadata is worth on
+its own.
+
+```bash
+python -m bench --dry-run                                   # no provider, no spend
+python -m bench --model anthropic/claude-opus-5 --replicates 4
+```
+
+Every expected answer is derived from the same recorded responses the tools serve, and
+`tests/test_bench.py` solves each task from those responses and checks the result against
+the declared answer. A task whose answer cannot be reached that way is a broken task, and
+that is where it shows up. Each task also records a `basis` saying where its figure comes
+from, so a reader can check it without taking this project's word for it.
+
+The freeboard task is checkable against the agency's own arithmetic: USGS publishes the
+water surface elevation as parameter 63160, at 40.07 ft NAVD88, which is the gage height of
+3.03 ft plus the station's datum offset of 37.04 ft.
+
+Scoring is written before any sweep runs and is in version control, so a rule cannot be
+adjusted after seeing a result it disfavours.
+
 ## API keys and rate limits
 
 The service allows 50 requests per IP per hour unauthenticated and 1,000 per hour with a

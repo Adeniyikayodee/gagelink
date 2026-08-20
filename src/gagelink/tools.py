@@ -45,10 +45,26 @@ COMMON_PARAMETERS: dict[str, str] = {
     "00095": "specific conductance",
     "00300": "dissolved oxygen",
     "00400": "pH",
+    "00480": "salinity",
     "63160": "water surface elevation, above NAVD88",
+    "63680": "turbidity",
+    "99133": "nitrate",
     "62614": "lake or reservoir elevation, above NGVD29",
     "72019": "depth to water level, below land surface",
 }
+
+
+def _parameters(page: dict[str, Any]) -> list[dict[str, Any]]:
+    """Rows from the parameter-codes collection, which keys its code as `id`."""
+    return [
+        {
+            "parameter_code": (f.get("properties") or {}).get("id"),
+            "name": (f.get("properties") or {}).get("parameter_name"),
+            "unit": (f.get("properties") or {}).get("unit_of_measure"),
+            "description": (f.get("properties") or {}).get("parameter_description"),
+        }
+        for f in (page.get("features") or [])
+    ]
 
 
 def _peaks_note(result: Result, partial: bool, found: int, limit: int) -> Result:
@@ -467,7 +483,12 @@ class Toolkit:
         for t in gauge.thresholds:
             if t.stage is not None:
                 self.session.record("get_forecast", f"{t.name}_stage", t.stage)
-        for value, field in ((gauge.observed, "observed"), (gauge.forecast, "forecast")):
+        for value, field in (
+            (gauge.observed, "observed"),
+            (gauge.forecast, "forecast"),
+            (gauge.observed_flow, "observed_flow"),
+            (gauge.forecast_flow, "forecast_flow"),
+        ):
             if value is not None:
                 self.session.record("get_forecast", field, value)
 
@@ -480,11 +501,13 @@ class Toolkit:
                 "timezone": gauge.timezone,
                 "observed": {
                     "stage": gauge.observed,
+                    "flow": gauge.observed_flow,
                     "time": gauge.observed_at,
                     "category": gauge.observed_category,
                 },
                 "forecast": {
                     "stage": gauge.forecast,
+                    "flow": gauge.forecast_flow,
                     "time": gauge.forecast_at,
                     "category": gauge.forecast_category,
                 },
@@ -503,6 +526,19 @@ class Toolkit:
             f"elevation is not on that datum and comparing one against these directly "
             f"will be refused."
         )
+        if gauge.observed_flow is not None and gauge.thresholds:
+            published = next(
+                (t.flow for t in gauge.thresholds if t.flow is not None), None
+            )
+            if published is not None and published.units != gauge.observed_flow.units:
+                result.note(
+                    f"the observed flow is published in "
+                    f"{unit_text(gauge.observed_flow.units)} and the thresholds in "
+                    f"{unit_text(published.units)}, in the same response; they differ by "
+                    f"a factor of "
+                    f"{published.to(gauge.observed_flow.units).magnitude / published.magnitude:g}"
+                )
+
         missing = [t.name for t in gauge.thresholds if t.flow is None]
         if missing:
             result.note(
@@ -644,23 +680,58 @@ class Toolkit:
                 data={"parameter_code": query, "name": COMMON_PARAMETERS[query]},
             )
 
-        page = self.session.items("parameter-codes", limit=20, q=query)
-        found = [
-            {
-                "parameter_code": (f.get("properties") or {}).get("parameter_code")
-                or (f.get("properties") or {}).get("id"),
-                "name": (f.get("properties") or {}).get("parameter_name"),
-                "unit": (f.get("properties") or {}).get("unit_of_measure"),
-            }
-            for f in (page.get("features") or [])
+        # The collection filters on `id` and on an exact `parameter_name`, and ignores
+        # anything else silently: `q=discharge` returns the first rows of the collection
+        # with a 200, which reads as a result and is not one.
+        #
+        # Exact names are no better as an interface, because the published name for
+        # specific conductance is "Specific cond at 25C" and nothing would guess it. So a
+        # description is matched against the common parameters held here, and only a code
+        # or an exact name is put to the service.
+        if query.isdigit() and len(query) == 5:
+            return self._parameter_by_code(query)
+
+        wanted = query.strip().lower()
+        matches = [
+            {"parameter_code": code, "name": name}
+            for code, name in COMMON_PARAMETERS.items()
+            if wanted in name.lower() or name.lower() in wanted
         ]
+        if matches:
+            return Result(ok=True, data={"parameters": matches})
+
+        page = self.session.items("parameter-codes", limit=20, parameter_name=query)
+        found = _parameters(page)
+        if found:
+            return Result(ok=True, data={"parameters": found})
+
+        return Result.failure(
+            ErrorCode.NO_DATA,
+            f"no parameter matches {query!r}",
+            "Names are not searchable at this service, only matched in full, and its own "
+            "spellings are not guessable: specific conductance is published as "
+            "'Specific cond at 25C'. Look up a five-digit code directly, or ask "
+            "get_latest without a parameter filter to see what this location measures "
+            "and what each code is.",
+        )
+
+    @_guarded
+    def _parameter_by_code(self, code: str) -> Result:
+        """One parameter, by the code a reading carries."""
+        if code in COMMON_PARAMETERS:
+            return Result(
+                ok=True,
+                data={"parameter_code": code, "name": COMMON_PARAMETERS[code]},
+            )
+        page = self.session.items("parameter-codes", id=code)
+        found = _parameters(page)
         if not found:
             return Result.failure(
                 ErrorCode.NO_DATA,
-                f"no parameter matched {query!r}",
-                "Try a single word such as discharge, stage, temperature, or turbidity.",
+                f"no parameter has the code {code!r}",
+                "Codes are five digits, as in 00060 for discharge.",
             )
-        return Result(ok=True, data={"parameters": found})
+        return Result(ok=True, data=found[0])
 
     # Internals ----------------------------------------------------------------------
 
