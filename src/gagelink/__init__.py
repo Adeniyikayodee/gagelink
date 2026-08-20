@@ -35,6 +35,9 @@ from .results import ErrorCode, Result
 from .server import Server, serve_stdio
 from .session import Session
 from .tools import Toolkit
+from .era5 import Climate
+from .grace import Granule, Gravimetry
+from .jobs import CredentialsMissing, Job, JobFailed, JobNotReady
 from .swot import NoObservations, Pass, Satellite
 from .service import (
     BASE_URL,
@@ -59,6 +62,13 @@ __all__ = [
     "ReplayReport",
     "replay",
     "Basin",
+    "Climate",
+    "CredentialsMissing",
+    "Granule",
+    "Gravimetry",
+    "Job",
+    "JobFailed",
+    "JobNotReady",
     "Forecasts",
     "Network",
     "NoObservations",
