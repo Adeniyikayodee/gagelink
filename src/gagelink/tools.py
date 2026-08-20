@@ -24,8 +24,12 @@ from .normalise import STATISTICS, Reading, readings_from
 from .results import DEFAULT_BUDGET_TOKENS, ErrorCode, Result, unit_text
 from .nldi import DIRECTIONS, NotOnTheNetwork
 from .nwps import GaugeNotFound
-from .service import QuotaExhausted, ServiceUnavailable
+from .service import QuotaExhausted, ServiceUnavailable, more_pages
 from .session import Session
+
+#: Ceiling on the series listed for one location. The service's own default is ten, which
+#: is fewer than several stations publish, and it gives no count of what it withheld.
+SERIES_PER_LOCATION = 200
 
 #: How many points of a series are shown alongside its summary. Enough to see a shape,
 #: not enough to answer from, which is the intended reading: the summary is the answer and
@@ -45,6 +49,18 @@ COMMON_PARAMETERS: dict[str, str] = {
     "62614": "lake or reservoir elevation, above NGVD29",
     "72019": "depth to water level, below land surface",
 }
+
+
+def _peaks_note(result: Result, partial: bool, found: int, limit: int) -> Result:
+    """State what the peak listing left out, so a cap does not read as coverage."""
+    if found > limit:
+        result.note(f"{found} peaks are on record and the largest {limit} are listed")
+    if partial:
+        result.note(
+            "the peak record is longer than one page and was cut off, so the largest "
+            "listed may not be the largest on record"
+        )
+    return result
 
 
 def _guarded(method: Callable[..., Result]) -> Callable[..., Result]:
@@ -226,6 +242,10 @@ class Toolkit:
             "latest-continuous",
             monitoring_location_id=identifier,
             parameter_code=",".join(wanted) if wanted else None,
+            # The service pages at ten by default, and a station can carry twice that in
+            # separate series, so an unstated default drops parameters from a listing that
+            # otherwise reads as complete.
+            limit=SERIES_PER_LOCATION,
         )
         readings = readings_from(page, station)
         if not readings:
@@ -266,6 +286,12 @@ class Toolkit:
                 "readings": [self._render_reading(r, now) for r in kept],
             },
         )
+        if more_pages(page):
+            result.note(
+                f"this location publishes more than {SERIES_PER_LOCATION} series and the "
+                f"listing is partial; ask for specific parameter codes to be sure of "
+                f"reaching one"
+            )
         if dropped:
             result.note(
                 f"dropped as older than {max_age_hours} hours: "
@@ -319,6 +345,7 @@ class Toolkit:
             )
 
         handle = self._store(identifier, parameter, resolution, start, end, readings)
+        truncated = more_pages(page)
         return Result(
             ok=True,
             data={
@@ -329,6 +356,12 @@ class Toolkit:
         ).note(
             f"{len(readings)} points are held under this handle; the preview is a sample. "
             f"Use slice_series with the handle to narrow or aggregate."
+            + (
+                " The range holds more than this and was cut off, so narrow the dates or "
+                "use the daily resolution."
+                if truncated
+                else ""
+            )
         )
 
     @_guarded
@@ -387,6 +420,7 @@ class Toolkit:
             )
 
         ranked = sorted(readings, key=lambda r: r.value.magnitude, reverse=True)[:limit]
+        partial = more_pages(page)
         return Result(
             ok=True,
             data={
@@ -404,6 +438,8 @@ class Toolkit:
                 "peaks_in_record": len(readings),
             },
         )
+        result = _peaks_note(result, partial, len(readings), limit)
+        return result
 
     # Forecasts ----------------------------------------------------------------------
 

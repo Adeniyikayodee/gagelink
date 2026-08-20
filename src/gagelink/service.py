@@ -197,6 +197,19 @@ class Retrieval:
         }
 
 
+def more_pages(page: Mapping[str, Any]) -> bool:
+    """Whether the service is holding back rows behind a next link.
+
+    `numberMatched` is published as null, so the only signal that a response is partial is
+    the presence of that link. Without checking it a default page of ten reads as the whole
+    of what a station measures, which is how a station's discharge can be absent from a
+    listing that appears complete.
+    """
+    return any(
+        (link or {}).get("rel") == "next" for link in page.get("links") or []
+    )
+
+
 class Cache(Protocol):
     """Anything that can hold a response body against its resolved URL."""
 

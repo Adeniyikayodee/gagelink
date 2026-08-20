@@ -251,3 +251,28 @@ def test_a_result_inside_its_budget_is_left_alone():
 def test_notes_survive_serialisation(kit):
     result = Result(ok=True, data={"x": 1}).note("something worth knowing")
     assert result.to_dict()["notes"] == ["something worth knowing"]
+
+
+def test_a_partial_listing_says_so_rather_than_reading_as_complete():
+    """The service pages at ten by default and publishes no match count, so the only
+    signal is a next link. Without checking it, a station's discharge can be absent from
+    a listing that appears to be everything the station measures."""
+    page = json.loads(json.dumps(LATEST))
+    page["links"] = [{"rel": "next", "href": "https://example/next"}]
+    fetch = serving(monitoring_locations=LOCATION, latest_continuous=page)
+    with Session(service=Service(fetch=fetch)) as work:
+        notes = " ".join(Toolkit(work).get_latest("USGS-07374000").to_dict()["notes"])
+    assert "listing is partial" in notes
+
+
+def test_a_complete_listing_makes_no_such_claim():
+    """The recorded page carries a next link, having been captured at the service's own
+    default of ten, which is itself the evidence that the default truncates."""
+    assert any(l.get("rel") == "next" for l in LATEST["links"])
+
+    complete = json.loads(json.dumps(LATEST))
+    complete["links"] = [l for l in complete["links"] if l.get("rel") != "next"]
+    fetch = serving(monitoring_locations=LOCATION, latest_continuous=complete)
+    with Session(service=Service(fetch=fetch)) as work:
+        notes = " ".join(Toolkit(work).get_latest("USGS-07374000").to_dict().get("notes", []))
+    assert "partial" not in notes
