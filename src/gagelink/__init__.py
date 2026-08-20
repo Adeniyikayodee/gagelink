@@ -14,7 +14,7 @@ Pre-alpha, and the API will change.
 
 #: Single source of truth for the version; pyproject reads it from here, so the packaged
 #: metadata and the attribute cannot drift apart.
-__version__ = "0.0.1"
+__version__ = "0.1.0"
 
 from .normalise import (
     Location,

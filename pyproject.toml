@@ -11,7 +11,7 @@ requires-python = ">=3.10"
 license = { text = "MIT" }
 keywords = ["hydrology", "usgs", "water", "llm", "agents", "mcp", "reproducibility"]
 authors = [{ name = "Kayode Adeniyi" }]
-dependencies = ["quantity-guard>=0.8"]
+dependencies = ["quantity-guard>=0.8", "certifi>=2024.0"]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Intended Audience :: Developers",
@@ -32,7 +32,7 @@ gagelink-mcp = "gagelink.server:main"
 gagelink-replay = "gagelink.replay:main"
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "certifi>=2024.0"]
+dev = ["pytest>=8.0"]
 
 [project.urls]
 Homepage = "https://github.com/Adeniyikayodee/gagelink"

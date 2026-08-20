@@ -22,12 +22,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Mapping, Protocol
+
+import certifi
 
 BASE_URL = "https://api.waterdata.usgs.gov/ogcapi/v0"
 
@@ -237,10 +240,22 @@ class MemoryCache(dict):
 Fetch = Callable[[str, Mapping[str, str]], tuple[int, Mapping[str, str], str]]
 
 
+def _trust_store() -> ssl.SSLContext:
+    """A context that can verify the services this package talks to.
+
+    A Python installed outside the system keychain ships without a trust store, which is
+    the default on macOS for a python.org build, and every HTTPS call then fails
+    verification. Since fetching over HTTPS is the whole of what this package does, the
+    certificates come from certifi rather than from whatever the interpreter happened to
+    be installed with.
+    """
+    return ssl.create_default_context(cafile=certifi.where())
+
+
 def _http(url: str, headers: Mapping[str, str]) -> tuple[int, Mapping[str, str], str]:
     request = urllib.request.Request(url, headers=dict(headers))
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with urllib.request.urlopen(request, timeout=30, context=_trust_store()) as response:
             return response.status, dict(response.headers), response.read().decode()
     except urllib.error.HTTPError as exc:  # pragma: no cover - needs the live service
         return exc.code, dict(exc.headers or {}), exc.read().decode(errors="replace")

@@ -314,6 +314,41 @@ water surface elevation as parameter 63160, at 40.07 ft NAVD88, which is the gag
 Scoring is written before any sweep runs and is in version control, so a rule cannot be
 adjusted after seeing a result it disfavours.
 
+### First results
+
+gpt-oss-120b, nine tasks, three conditions, eight replicates, 216 runs, $0.09.
+
+| condition | correct |
+|---|---|
+| `http_only` | 61/72 |
+| `toolkit_plain` | 63/72 |
+| `toolkit` | 70/72 |
+
+Correctness counts every run, including the eight that ended without an answer at all. Seven
+of those belong to `http_only` on the two tasks whose raw record runs to 42,000 and 50,000
+prompt tokens, where the model degenerates into repeating a number instead of answering.
+Those failures are caused by the condition, so excluding them would credit raw JSON for the
+runs its own payload size destroyed.
+
+The suite sits at ceiling on six tasks of nine, which is a finding about the suite. Where it
+separates:
+
+| task | `http_only` | `toolkit_plain` | `toolkit` |
+|---|---|---|---|
+| `peak_fraction`, a long record | 3/8 | 8/8 | 8/8 |
+| `record_peak`, a long record | 6/8 | 8/8 | 8/8 |
+| `forecast_flow`, an opaque unit | 8/8 | 1/8 | 7/8 |
+
+On the two long-record tasks the median prompt was 49,864 and 42,006 tokens through raw JSON
+against 5,462 and 2,384 through the toolkit. On the opaque-unit task, stripping the reference
+frames sent seven of eight runs into the recorded trap, answering with the USGS discharge of
+3010 ft³/s rather than the forecast service's 2.95 kcfs.
+
+The toolkit does not beat raw JSON on accuracy in general. The gap is driven almost entirely
+by the two tasks where the raw payload will not fit. Eight of 27 cells split across their
+replicates, so differences under roughly two runs in eight are not separated by this design,
+and one model is one model.
+
 ## API keys and rate limits
 
 The service allows 50 requests per IP per hour unauthenticated and 1,000 per hour with a

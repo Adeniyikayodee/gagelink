@@ -166,3 +166,23 @@ def test_an_unexplained_error_still_names_the_status():
     with pytest.raises(ServiceUnavailable) as caught:
         Service(fetch=fetch).items("daily", monitoring_location_id="X")
     assert "500" in str(caught.value)
+
+
+def test_https_verification_does_not_depend_on_how_python_was_installed():
+    """A python.org build on macOS ships without a trust store, and every call then fails
+    verification. Fetching over HTTPS is the whole of what this package does, so the
+    certificates come from certifi rather than from the interpreter's surroundings."""
+    from gagelink.service import _trust_store
+
+    context = _trust_store()
+    assert context.verify_mode.name == "CERT_REQUIRED"
+    assert context.get_ca_certs()
+
+
+def test_every_client_shares_that_trust_store():
+    """Three services, one fetch, so a fix in one place covers all of them."""
+    from gagelink import nldi, nwps
+    from gagelink.service import _http
+
+    assert nwps._http is _http
+    assert nldi._http is _http
