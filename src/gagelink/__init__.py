@@ -35,6 +35,14 @@ from .results import ErrorCode, Result
 from .server import Server, serve_stdio
 from .session import Session
 from .tools import Toolkit
+from .datasets import (
+    Catchment,
+    HydroBasin,
+    DatasetNotFound,
+    read_camels,
+    read_dbf,
+    read_hydrobasins,
+)
 from .era5 import Climate
 from .grace import Granule, Gravimetry
 from .jobs import CredentialsMissing, Job, JobFailed, JobNotReady
@@ -62,7 +70,10 @@ __all__ = [
     "ReplayReport",
     "replay",
     "Basin",
+    "Catchment",
     "Climate",
+    "DatasetNotFound",
+    "HydroBasin",
     "CredentialsMissing",
     "Granule",
     "Gravimetry",
@@ -76,6 +87,9 @@ __all__ = [
     "Satellite",
     "NetworkSite",
     "NotOnTheNetwork",
+    "read_camels",
+    "read_dbf",
+    "read_hydrobasins",
     "ring_area",
     "Gauge",
     "MODEL_SERIES",

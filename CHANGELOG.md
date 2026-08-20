@@ -1,5 +1,37 @@
 # Changelog
 
+## Unreleased
+
+**The remaining source families**, which completes the set named in the original design.
+
+*National Water Model*, through the same host as the gauge forecasts, so a station resolves
+to its reach through the gauge it already carries. Modelled series are kept apart from
+observations in their own type, because the model covers reaches with no gauge on them and a
+figure from it may have nothing measured behind it.
+
+*SWOT*, through NASA's Hydrocron, covering the reaches no gauge stands on. Elevations are
+referenced to the EGM2008 geoid and are refused against a stage or a survey, since the offset
+varies with position and nothing publishes it.
+
+*ERA5*, through the Copernicus store, which is genuinely queued. A synchronous source is
+fetched with `get_` and a queued one is asked with `request_`, polled, and resolved. An agent
+cannot block on an hour-long queue inside a tool call, so the two shapes are named apart.
+
+*GRACE*, through NASA's metadata repository, which is not queued. Discovery is open and
+retrieval is not: the data file answers 401 while the checksum beside it answers 206. That
+boundary is tested.
+
+*CAMELS and HydroSHEDS*, which have no service behind them at all and are read from a local
+copy. Both readers are written to the published format specifications and exercised against
+files built to those specifications; neither has been run against the real distribution.
+HydroBASINS is read from the dBase table beside the shape file, which needs no geospatial
+dependency and does not open the geometry.
+
+Four spellings of one unit now appear across two agencies: `cfs`, `kcfs`, `ft^3/s`, and
+`ft³/s`. Mapping `kcfs` to `kilofoot**3/second` cubes the prefix and is out by a factor of
+10⁹, which is the error this package exists to prevent arriving in its own unit table. It is
+pinned by a test.
+
 ## 0.1.0
 
 Everything above the transport layer, which is to say everything the package is for.
