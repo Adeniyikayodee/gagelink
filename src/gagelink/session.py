@@ -26,6 +26,7 @@ from . import __version__
 from .normalise import Location, location_from
 from .nldi import Basin, Network, NetworkSite
 from .nwps import Forecasts, Gauge, ModelSeries
+from .swot import Pass, Satellite
 from quantity_guard import Q
 
 from .service import Retrieval, Service
@@ -46,12 +47,14 @@ class Session:
         *,
         forecasts: Forecasts | None = None,
         network: Network | None = None,
+        satellite: Satellite | None = None,
         api_key: str | None = None,
         question: str = "",
     ) -> None:
         self.service = service if service is not None else Service(api_key=api_key)
         self.forecasts = forecasts if forecasts is not None else Forecasts()
         self.network = network if network is not None else Network()
+        self.satellite = satellite if satellite is not None else Satellite()
         self.question = question
         self.started_at = datetime.now(timezone.utc)
         self.retrievals: list[Retrieval] = []
@@ -62,6 +65,7 @@ class Session:
         self.gauges: dict[str, Gauge] = {}
         self.basins: dict[str, Basin] = {}
         self.model: dict[tuple[str, str], ModelSeries | None] = {}
+        self.passes: dict[tuple[str, str, str], list[Pass]] = {}
         self.ledger = None
         self._stack: ExitStack | None = None
 
@@ -175,6 +179,17 @@ class Session:
             self._keep(retrieval)
             self.model[key] = found
         return self.model[key], reach
+
+    def satellite_passes(
+        self, feature_id: str, start: str, end: str, feature: str = "Reach"
+    ) -> list[Pass]:
+        """Satellite overpasses of a river reach in a window."""
+        key = (feature_id, start, end)
+        if key not in self.passes:
+            found, retrieval = self.satellite.passes(feature_id, start, end, feature)
+            self._keep(retrieval)
+            self.passes[key] = found
+        return self.passes[key]
 
     # Provenance --------------------------------------------------------------------
 

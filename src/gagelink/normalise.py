@@ -81,6 +81,10 @@ UNITS: dict[str, str] = {
     "std units": "pH_unit",
     "ppt": "salinity_ppt",
     "%": "percent",
+    # A slope in metres per metre, which is dimensionless. Entered so it is a checked
+    # reading rather than a lucky one, since an unmapped unit is allowed through with a
+    # warning and this one appears on every satellite pass.
+    "m/m": "m/m",
     "_fnu": "FNU",
     "_ntu": "NTU",
     "fnu": "FNU",

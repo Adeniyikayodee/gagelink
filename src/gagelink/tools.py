@@ -24,6 +24,8 @@ from .normalise import STATISTICS, Reading, readings_from
 from .results import DEFAULT_BUDGET_TOKENS, ErrorCode, Result, unit_text
 from .nldi import DIRECTIONS, NotOnTheNetwork
 from .nwps import MODEL_SERIES, GaugeNotFound
+from .swot import DATUM as SATELLITE_DATUM
+from .swot import NoObservations
 from .service import QuotaExhausted, ServiceUnavailable, more_pages
 from .session import Session
 
@@ -605,6 +607,70 @@ class Toolkit:
             "These are modelled flows, not measurements. The model covers reaches with no "
             "gauge on them, so a value here may have nothing observed behind it, and it "
             "carries no record-quality grade because the service publishes none."
+        )
+
+    @_guarded
+    def get_satellite_passes(
+        self, feature_id: str, start: str, end: str
+    ) -> Result:
+        """Water surface elevation measured from orbit, by the SWOT mission.
+
+        Covers reaches that no gauge stands on, which is most of them. The elevation is
+        referenced to the EGM2008 geoid, not to a national datum and not to any gage
+        datum, so it cannot be differenced against a stage or a survey without an offset
+        that varies with position and that nothing here publishes.
+
+        A reach identifier is a SWORD river reach id, which is not a USGS station number.
+        Dates are ISO.
+        """
+        try:
+            passes = self.session.satellite_passes(feature_id, start, end)
+        except NoObservations:
+            return Result.failure(
+                ErrorCode.NO_DATA,
+                f"the mission holds no passes for reach {feature_id}",
+                "Reach identifiers come from the SWORD river database and are not USGS "
+                "station numbers. Check the identifier, or widen the dates.",
+            )
+
+        usable = [p for p in passes if p.is_usable]
+        if not usable:
+            return Result.failure(
+                ErrorCode.NO_DATA,
+                f"no usable elevation for reach {feature_id} between {start} and {end}"
+                + (f", though {len(passes)} passes were recorded" if passes else ""),
+                "The satellite revisits a given river every few days at best, and a pass "
+                "can cross without producing a retrieval. Widen the dates.",
+            )
+
+        for observation in usable:
+            self.session.record(
+                "get_satellite_passes", "elevation", observation.elevation
+            )
+
+        return Result(
+            ok=True,
+            data={
+                "reach": feature_id,
+                "passes": len(passes),
+                "with_an_elevation": len(usable),
+                "datum": SATELLITE_DATUM,
+                "observations": [
+                    {
+                        "time": p.observed_at,
+                        "elevation": p.elevation,
+                        "uncertainty": p.uncertainty,
+                        "width": p.width,
+                        "quality": p.quality,
+                    }
+                    for p in usable
+                ],
+            },
+        ).note(
+            f"Elevations here are on {SATELLITE_DATUM}, a geoid, and a stage or a survey "
+            f"is not. Differencing them will be refused rather than answered, because the "
+            f"offset between the two varies with position and neither service publishes "
+            f"it."
         )
 
     # Network --------------------------------------------------------------------------

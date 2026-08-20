@@ -189,6 +189,25 @@ TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "get_satellite_passes",
+        "description": (
+            "Water surface elevation measured from orbit by the SWOT mission, for a river "
+            "reach. Covers reaches no gauge stands on. Elevations are referenced to the "
+            "EGM2008 geoid, not to a national datum and not to any gage datum, so they "
+            "cannot be differenced against a stage or a surveyed elevation. A reach "
+            "identifier is a SWORD river reach id and is not a USGS station number."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "feature_id": {"type": "string", "description": "SWORD reach id"},
+                "start": {"type": "string", "description": "ISO date"},
+                "end": {"type": "string", "description": "ISO date"},
+            },
+            "required": ["feature_id", "start", "end"],
+        },
+    },
+    {
         "name": "navigate_network",
         "description": (
             "Monitoring locations upstream or downstream of a point, following the river "

@@ -35,6 +35,7 @@ from .results import ErrorCode, Result
 from .server import Server, serve_stdio
 from .session import Session
 from .tools import Toolkit
+from .swot import NoObservations, Pass, Satellite
 from .service import (
     BASE_URL,
     COLLECTIONS,
@@ -60,6 +61,9 @@ __all__ = [
     "Basin",
     "Forecasts",
     "Network",
+    "NoObservations",
+    "Pass",
+    "Satellite",
     "NetworkSite",
     "NotOnTheNetwork",
     "ring_area",
