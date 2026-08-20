@@ -419,12 +419,6 @@ naming is the `time-series-revisions` collection, which publishes changes and de
 approved record, and which is what will let a replay separate an answer that changed because
 the agency revised a measurement from one that changed because the code changed.
 
-## Why it is shaped this way
-
-[`DESIGN.md`](DESIGN.md) traces the reasoning: which decisions were forced by what the
-services actually publish, which were reversed once evidence arrived, and what is still
-unverified. It is written for someone deciding whether to depend on this or to change it.
-
 ## Development
 
 ```bash

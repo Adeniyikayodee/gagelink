@@ -55,5 +55,3 @@ Climate Data Store, GRACE via NASA Earthdata, and local copies of CAMELS and Hyd
 ## Documentation
 
 - README: https://github.com/Adeniyikayodee/gagelink/blob/main/README.md
-- Design history: https://github.com/Adeniyikayodee/gagelink/blob/main/DESIGN.md
-- Changelog: https://github.com/Adeniyikayodee/gagelink/blob/main/CHANGELOG.md

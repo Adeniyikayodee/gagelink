@@ -61,8 +61,6 @@ dev = ["pytest>=8.0"]
 [project.urls]
 Homepage = "https://github.com/Adeniyikayodee/gagelink"
 Documentation = "https://github.com/Adeniyikayodee/gagelink#readme"
-Changelog = "https://github.com/Adeniyikayodee/gagelink/blob/main/CHANGELOG.md"
-"Design history" = "https://github.com/Adeniyikayodee/gagelink/blob/main/DESIGN.md"
 Issues = "https://github.com/Adeniyikayodee/gagelink/issues"
 Source = "https://github.com/Adeniyikayodee/gagelink"
 
