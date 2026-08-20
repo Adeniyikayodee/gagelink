@@ -1,6 +1,19 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
+
+**Findable and runnable by an agent.** The server now sends `instructions` at handshake,
+which clients put in front of the model before it calls anything, carrying the four things
+that decide whether an answer is right rather than a description of the software: that a
+gage height is not an elevation, that latest is not current, that modelled is not measured,
+and that units are not interchangeable across these services. A `server.json` registers it
+with the MCP registry, an `llms.txt` summarises what it answers, and the README leads with a
+copy-paste configuration and the questions it covers.
+
+`uvx --from gagelink gagelink-mcp` runs it with no install and no account. The only
+environment variable is optional and raises a rate limit rather than gating the server, which
+is checked by a test, because anything required at startup is a reason an agent never gets
+past the handshake.
 
 **The remaining source families**, which completes the set named in the original design.
 

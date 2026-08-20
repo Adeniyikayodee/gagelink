@@ -1,0 +1,59 @@
+# gagelink
+
+> Hydrology data for AI agents. River level, streamflow, flood forecasts, water quality,
+> drainage basins, and satellite water surface elevation, from USGS, NOAA, and SWOT. Every
+> value carries its unit, the datum it is measured from, its timezone, and whether the
+> record is provisional or approved.
+
+mcp-name: io.github.Adeniyikayodee/gagelink
+
+## Run it
+
+    uvx --from gagelink gagelink-mcp
+
+MCP client configuration:
+
+    {"mcpServers": {"gagelink": {"command": "uvx", "args": ["--from", "gagelink", "gagelink-mcp"]}}}
+
+No account is needed. A free key from https://api.waterdata.usgs.gov/signup raises the
+allowance from 50 requests an hour to 1000; set it as GAGELINK_API_KEY.
+
+## Questions it answers
+
+- How high is the river at a gage, and how does that compare with flood stage?
+- How much freeboard is there between the water and a surveyed levee crest?
+- What is the discharge now, and what fraction of the record peak is that?
+- What is forecast over the next few days, and does it cross a flood category?
+- What is upstream or downstream of this point, along the river?
+- How large is the basin draining to this point?
+- What did this station record over a date range, and was the record revised since?
+- What is the water surface elevation of a river with no gage on it?
+- Is a reading provisional or approved, and how old is it?
+
+## Tools
+
+find_locations, describe_location, get_latest, get_series, slice_series, get_peaks,
+get_forecast, get_model_forecast, get_satellite_passes, navigate_network, get_basin,
+lookup_parameter, export_manifest.
+
+## What it will refuse, and why that is the point
+
+A gage height is measured from the station's own datum, not from sea level. Subtracting one
+from a surveyed elevation gives a number that looks like a freeboard and is wrong by tens of
+feet, in the direction of calling a levee safe. This package refuses that subtraction rather
+than answering it, and describe_location returns the offset that makes it well defined.
+
+The same applies to satellite elevations, which are on a geoid, and to modelled flows, which
+may have no measurement behind them at all.
+
+## Sources
+
+USGS Water Data APIs, NOAA National Water Prediction Service, NOAA National Water Model,
+USGS Hydro Network-Linked Data Index, SWOT via NASA Hydrocron, ERA5 via the Copernicus
+Climate Data Store, GRACE via NASA Earthdata, and local copies of CAMELS and HydroSHEDS.
+
+## Documentation
+
+- README: https://github.com/Adeniyikayodee/gagelink/blob/main/README.md
+- Design history: https://github.com/Adeniyikayodee/gagelink/blob/main/DESIGN.md
+- Changelog: https://github.com/Adeniyikayodee/gagelink/blob/main/CHANGELOG.md

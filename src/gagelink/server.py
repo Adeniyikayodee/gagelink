@@ -25,6 +25,32 @@ from .tools import Toolkit
 
 PROTOCOL_VERSION = "2025-06-18"
 
+#: Sent to the client at handshake and put in front of the model before it calls anything.
+#: This is the one piece of text that reaches every conversation, so it carries the things
+#: that decide whether an answer is right rather than a description of the software.
+#:
+#: Everything in it was measured or observed. The datum rule is the error seven of eleven
+#: models made in the quantity-guard evaluation. Latest against current is a live payload
+#: at Little Falls holding a discharge from this morning beside a turbidity from 2019. The
+#: unit warning is four spellings of one quantity across two agencies.
+INSTRUCTIONS = """Hydrology data for rivers, gages, forecasts, and basins, from USGS, NOAA, and the SWOT satellite. Use it for questions about streamflow, river level, flood risk, water quality, drainage areas, and what lies upstream or downstream of a point.
+
+Identifiers are of the form USGS-01646500, with the agency prefix and the leading zero. Use find_locations to search by state, county, or bounding box if you have a place name rather than a number.
+
+Four things decide whether an answer is right.
+
+A river level is not an elevation. Gage height is measured from the station's own datum, whose zero sits at some height on a national datum, and the two are both lengths in feet. Subtracting a stage from a surveyed elevation without adding that offset gives a number that looks like a freeboard and is wrong by tens of feet, in the direction of calling a levee safe. Call describe_location before any such comparison; it returns the offset. Flood thresholds from get_forecast are already on the gage datum and need no shift.
+
+Latest is not current. Each parameter returns the last value held for it, independently, so one response can carry a discharge from this morning beside a turbidity from years ago. Pass max_age_hours, and read the age on every reading you quote.
+
+Modelled is not measured. get_model_forecast returns National Water Model output, which covers reaches with no gage on them, so a value from it may have nothing observed behind it. get_satellite_passes returns elevations on a geoid, which cannot be compared to a stage or a survey at all.
+
+Units are not interchangeable across these services. Discharge appears as cfs, kcfs, ft^3/s, and ft^3/s with a superscript, and every value comes back labelled with its unit, datum, and record quality. Use those labels; do not assume a unit from a magnitude.
+
+Every value carries whether the record is provisional or approved. Say which when it matters. Never supply a number from memory: if a tool cannot provide it, report it as unavailable, and call export_manifest at the end when the answer needs to be reproducible.
+
+Without an API key the service allows 50 requests an hour, and each result tells you how many remain."""
+
 #: Kept short deliberately. A model degrades as its tool list grows, and eleven tools
 #: covering three services is the whole of what phase one offers.
 TOOLS: list[dict[str, Any]] = [
@@ -355,7 +381,14 @@ def dispatch(server: Server, method: str, params: dict[str, Any]) -> dict[str, A
         return {
             "protocolVersion": PROTOCOL_VERSION,
             "capabilities": {"tools": {}},
-            "serverInfo": {"name": "gagelink", "version": __version__},
+            "serverInfo": {
+                "name": "gagelink",
+                "title": "Hydrology data: rivers, gages, forecasts, basins",
+                "version": __version__,
+            },
+            # Clients surface this to the model before it calls anything, which makes it
+            # the highest-leverage text in the package.
+            "instructions": INSTRUCTIONS,
         }
     if method == "ping":
         return {}

@@ -180,3 +180,38 @@ def test_the_result_is_held_to_the_budget():
     server = Server(session_factory=offline, budget_tokens=60)
     body = text(server.call_tool("get_latest", {"identifier": "USGS-07374000"}))
     assert any("token budget" in note for note in body["notes"])
+
+
+# Discoverability -----------------------------------------------------------------------------
+
+
+def test_the_handshake_tells_the_model_what_this_is_for():
+    """The one piece of text that reaches every conversation, which clients put in front of
+    the model before it calls anything."""
+    from gagelink.server import INSTRUCTIONS, dispatch
+
+    result = dispatch(Server(session_factory=offline), "initialize", {})
+    assert result["instructions"] == INSTRUCTIONS
+    assert result["serverInfo"]["title"]
+
+
+def test_the_instructions_carry_the_errors_rather_than_a_description_of_the_software():
+    """Each of these was measured or observed, and each decides whether an answer is
+    right: the datum comparison seven of eleven models got wrong, a payload holding a
+    discharge from this morning beside a turbidity from 2019, and four spellings of one
+    unit across two agencies."""
+    from gagelink.server import INSTRUCTIONS
+
+    assert "own datum" in INSTRUCTIONS and "describe_location" in INSTRUCTIONS
+    assert "Latest is not current" in INSTRUCTIONS
+    assert "Modelled is not measured" in INSTRUCTIONS
+    assert "USGS-01646500" in INSTRUCTIONS
+    assert "unavailable" in INSTRUCTIONS
+
+
+def test_the_instructions_stay_small_enough_to_send_every_time():
+    """They are prepended to every conversation, so their length is a cost paid on every
+    question rather than once."""
+    from gagelink.server import INSTRUCTIONS
+
+    assert len(INSTRUCTIONS) < 3000

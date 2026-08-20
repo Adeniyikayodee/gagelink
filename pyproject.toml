@@ -5,15 +5,36 @@ build-backend = "hatchling.build"
 [project]
 name = "gagelink"
 dynamic = ["version"]
-description = "Hydrology retrieval for AI agents: typed quantities, record quality, and replayable provenance over the USGS Water Data APIs."
+description = "MCP server and Python library giving AI agents hydrology data: river level, streamflow, flood forecasts, basins, and satellite water levels from USGS, NOAA, and SWOT, with units, datums, and record quality attached."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-keywords = ["hydrology", "usgs", "water", "llm", "agents", "mcp", "reproducibility"]
+keywords = [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "agent-tools",
+    "llm",
+    "agents",
+    "hydrology",
+    "water",
+    "streamflow",
+    "river",
+    "flood",
+    "usgs",
+    "nwis",
+    "noaa",
+    "swot",
+    "era5",
+    "grace",
+    "water-quality",
+    "watershed",
+    "reproducibility",
+]
 authors = [{ name = "Kayode Adeniyi" }]
 dependencies = ["quantity-guard>=0.8", "certifi>=2024.0"]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
@@ -24,6 +45,9 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering",
     "Topic :: Scientific/Engineering :: Hydrology",
+    "Topic :: Scientific/Engineering :: GIS",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Environment :: Console",
     "Typing :: Typed",
 ]
 
@@ -36,7 +60,11 @@ dev = ["pytest>=8.0"]
 
 [project.urls]
 Homepage = "https://github.com/Adeniyikayodee/gagelink"
+Documentation = "https://github.com/Adeniyikayodee/gagelink#readme"
+Changelog = "https://github.com/Adeniyikayodee/gagelink/blob/main/CHANGELOG.md"
+"Design history" = "https://github.com/Adeniyikayodee/gagelink/blob/main/DESIGN.md"
 Issues = "https://github.com/Adeniyikayodee/gagelink/issues"
+Source = "https://github.com/Adeniyikayodee/gagelink"
 
 [tool.hatch.version]
 path = "src/gagelink/__init__.py"

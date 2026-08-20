@@ -1,14 +1,59 @@
 # gagelink
 
-Hydrology retrieval for AI agents. Values arrive carrying their unit, the datum they are
-measured from, their timezone, and whether the record is provisional or approved, and every
-request is recorded in a form that lets a session be re-run and its differences attributed.
+Hydrology data for AI agents. River level, streamflow, flood forecasts, water quality,
+drainage basins, and satellite water surface elevation, from USGS, NOAA, and SWOT. Every
+value carries its unit, the datum it is measured from, its timezone, and whether the record
+is provisional or approved.
+
+mcp-name: io.github.Adeniyikayodee/gagelink
 
 **Pre-alpha.** The API will change.
+
+## Run it as an MCP server
+
+```json
+{
+  "mcpServers": {
+    "gagelink": {
+      "command": "uvx",
+      "args": ["--from", "gagelink", "gagelink-mcp"]
+    }
+  }
+}
+```
+
+No account is needed to start. A free key from
+[api.waterdata.usgs.gov/signup](https://api.waterdata.usgs.gov/signup) raises the allowance
+from 50 requests an hour to 1,000; set it as `GAGELINK_API_KEY`.
+
+Or as a library:
 
 ```bash
 pip install gagelink
 ```
+
+## Questions it answers
+
+- How high is the river at a gage, and how does that compare with flood stage?
+- How much freeboard is there between the water and a surveyed levee crest?
+- What is the discharge now, and what fraction of the record peak is that?
+- What is forecast over the next few days, and does it cross a flood category?
+- What lies upstream or downstream of this point, along the river?
+- How large is the basin draining to this point?
+- What did this station record over a date range, and has that record been revised since?
+- What is the water surface elevation of a river with no gage on it?
+- Is a reading provisional or approved, and how old is it?
+
+## What it refuses, and why that is the point
+
+A gage height is measured from the station's own datum, not from sea level. Subtracting one
+from a surveyed elevation returns a number that looks like a freeboard and is wrong by tens
+of feet, in the direction of calling a levee safe. Both figures are lengths in feet, so
+nothing dimensional separates them and no units library catches it.
+
+This package refuses that subtraction rather than answering it, and `describe_location`
+returns the offset that makes it well defined. The same applies to satellite elevations,
+which are on a geoid, and to modelled flows, which may have no measurement behind them.
 
 ## Why
 

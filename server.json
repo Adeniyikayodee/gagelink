@@ -1,0 +1,31 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.Adeniyikayodee/gagelink",
+  "description": "River level, streamflow, flood forecasts and basins from USGS, NOAA and SWOT, with units and datums",
+  "version": "0.2.0",
+  "websiteUrl": "https://github.com/Adeniyikayodee/gagelink",
+  "repository": {
+    "url": "https://github.com/Adeniyikayodee/gagelink",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "pypi",
+      "registryBaseUrl": "https://pypi.org",
+      "identifier": "gagelink",
+      "version": "0.2.0",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "GAGELINK_API_KEY",
+          "description": "USGS Water Data API key, free from https://api.waterdata.usgs.gov/signup. Optional: without one the service allows 50 requests per hour rather than 1000.",
+          "isRequired": false,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}
