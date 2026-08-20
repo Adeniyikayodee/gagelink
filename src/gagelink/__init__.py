@@ -29,7 +29,7 @@ from .normalise import (
     timezone_of,
 )
 from .nldi import Basin, Network, NetworkSite, NotOnTheNetwork, ring_area
-from .nwps import Forecasts, Gauge, GaugeNotFound, Threshold
+from .nwps import MODEL_SERIES, Forecasts, Gauge, GaugeNotFound, ModelSeries, Threshold
 from .replay import OFFLINE, REVISION_AWARE, STRICT, ReplayReport, replay
 from .results import ErrorCode, Result
 from .server import Server, serve_stdio
@@ -64,6 +64,8 @@ __all__ = [
     "NotOnTheNetwork",
     "ring_area",
     "Gauge",
+    "MODEL_SERIES",
+    "ModelSeries",
     "GaugeNotFound",
     "Threshold",
     "Result",

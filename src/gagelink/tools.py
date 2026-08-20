@@ -23,7 +23,7 @@ from quantity_guard import Q
 from .normalise import STATISTICS, Reading, readings_from
 from .results import DEFAULT_BUDGET_TOKENS, ErrorCode, Result, unit_text
 from .nldi import DIRECTIONS, NotOnTheNetwork
-from .nwps import GaugeNotFound
+from .nwps import MODEL_SERIES, GaugeNotFound
 from .service import QuotaExhausted, ServiceUnavailable, more_pages
 from .session import Session
 
@@ -546,6 +546,66 @@ class Toolkit:
                 f"writes -9999 there, which is a sentinel and not a discharge"
             )
         return result
+
+    @_guarded
+    def get_model_forecast(
+        self, identifier: str, series: str = "short_range"
+    ) -> Result:
+        """National Water Model streamflow for the reach a station sits on.
+
+        These are modelled values and not measurements. The distinction matters to an
+        answer, because the model covers reaches that carry no gauge at all, so a figure
+        from it may have nothing observed behind it. Series are analysis_assimilation,
+        which looks back, and short_range, medium_range, medium_range_blend, and
+        long_range, which look forward. Not every reach publishes every series.
+        """
+        if series not in MODEL_SERIES:
+            return Result.failure(
+                ErrorCode.INVALID_ARGUMENTS,
+                f"unknown series {series!r}",
+                f"Use one of {', '.join(MODEL_SERIES)}.",
+            )
+
+        try:
+            modelled, reach = self.session.model_streamflow(identifier, series)
+        except GaugeNotFound:
+            return Result.failure(
+                ErrorCode.NO_DATA,
+                f"{identifier} has no forecast gauge, so its reach is not resolvable",
+                "Pass a National Water Model reach identifier directly if you have one, "
+                "or use get_latest for observations at this location.",
+            )
+
+        if modelled is None or not modelled.values:
+            return Result.failure(
+                ErrorCode.NO_DATA,
+                f"the model publishes no {series} series for reach {reach or identifier}",
+                f"Not every reach publishes every series. Try short_range, or "
+                f"analysis_assimilation for recent modelled flow.",
+            )
+
+        peak_at, peak = modelled.peak
+        for value, field in ((peak, "model_peak"), (modelled.at(), "model_last")):
+            if value is not None:
+                self.session.record("get_model_forecast", field, value)
+
+        return Result(
+            ok=True,
+            data={
+                "reach": reach,
+                "series": series,
+                "looks": "forward" if modelled.is_forecast else "back",
+                "issued": modelled.reference_time,
+                "points": len(modelled.values),
+                "first": {"time": modelled.values[0][0], "flow": modelled.values[0][1]},
+                "last": {"time": modelled.values[-1][0], "flow": modelled.at()},
+                "peak": {"time": peak_at, "flow": peak},
+            },
+        ).note(
+            "These are modelled flows, not measurements. The model covers reaches with no "
+            "gauge on them, so a value here may have nothing observed behind it, and it "
+            "carries no record-quality grade because the service publishes none."
+        )
 
     # Network --------------------------------------------------------------------------
 

@@ -46,10 +46,16 @@ def text(response):
 # Schemas ----------------------------------------------------------------------------------
 
 
-def test_the_tool_list_is_short_enough_to_be_read():
-    """A model degrades as its tool list grows, so a list mirroring three APIs would cost
-    more than it buys."""
-    assert len(TOOLS) == 11
+#: The ceiling the surface is designed to. A model degrades as its tool list grows, so the
+#: surface is organised by verb and the choice of which service answers is made by the
+#: server. Passing this is a design decision to take deliberately, not a number to raise.
+TOOL_BUDGET = 14
+
+
+def test_the_tool_list_stays_inside_its_budget():
+    """Organised by verb rather than by agency: five services behind twelve tools, where
+    mirroring their APIs would have cost several times that."""
+    assert len(TOOLS) <= TOOL_BUDGET
 
 
 def test_every_advertised_tool_can_actually_be_called(server):

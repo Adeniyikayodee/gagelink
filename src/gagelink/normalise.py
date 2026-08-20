@@ -55,12 +55,21 @@ UNITS: dict[str, str] = {
     "m": "meter",
     "mm": "millimeter",
     "ft^3/s": "foot**3/second",
+    # The National Water Model writes its unit with a superscript, in the same response
+    # family whose other endpoints write cfs and kcfs. Three spellings of one unit across
+    # one service.
+    "ft³/s": "foot**3/second",
+    "m³/s": "meter**3/second",
     "m^3/s": "meter**3/second",
     "ft^3/s/mi^2": "foot**3/second/mile**2",
     "ft/s": "foot/second",
     "mi^2": "mile**2",
     "ac-ft": "acre*foot",
     "mgd": "us_mgd",
+    # Thousands of cubic feet per second, which the forecast service publishes beside
+    # thresholds in cfs. Spelled as the prefixed unit rather than as kilofoot**3/second,
+    # since that would cube the prefix and be out by a factor of 10^9.
+    "kcfs": "kcfs",
     "mgal/d": "us_mgd",
     "degc": "degC",
     "degf": "degF",
@@ -186,7 +195,12 @@ def parse_unit(published: str | None) -> str:
     # The service writes exponents with a caret, which pint reads as exclusive-or, and
     # prefixes index units with an underscore. Both are mechanical and are tried before
     # giving up, so that a unit added upstream does not need a release here.
-    candidate = key.lstrip("_").replace("^", "**")
+    candidate = (
+        key.lstrip("_")
+        .replace("^", "**")
+        .replace("³", "**3")
+        .replace("²", "**2")
+    )
     try:
         ureg.parse_units(candidate)
     except Exception:

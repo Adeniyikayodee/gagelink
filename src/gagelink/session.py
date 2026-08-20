@@ -25,7 +25,7 @@ from quantity_guard import session as quantity_ledger
 from . import __version__
 from .normalise import Location, location_from
 from .nldi import Basin, Network, NetworkSite
-from .nwps import Forecasts, Gauge
+from .nwps import Forecasts, Gauge, ModelSeries
 from quantity_guard import Q
 
 from .service import Retrieval, Service
@@ -61,6 +61,7 @@ class Session:
         self.series: dict[str, dict[str, Any]] = {}
         self.gauges: dict[str, Gauge] = {}
         self.basins: dict[str, Basin] = {}
+        self.model: dict[tuple[str, str], ModelSeries | None] = {}
         self.ledger = None
         self._stack: ExitStack | None = None
 
@@ -150,6 +151,30 @@ class Session:
         if basin is not None:
             self.basins[identifier] = basin
         return basin
+
+    def model_streamflow(
+        self, identifier: str, series: str = "short_range"
+    ) -> tuple[ModelSeries | None, str]:
+        """Modelled streamflow for the reach a station sits on.
+
+        A question arrives naming a station, and the model is indexed by reach, so the
+        station is resolved through its forecast gauge. Returns the reach identifier
+        alongside the series, because a modelled flow quoted without the reach it belongs
+        to cannot be checked.
+        """
+        reach = identifier
+        if not identifier.isdigit() or identifier.startswith("0"):
+            gauge = self.gauge(identifier)
+            reach = getattr(gauge, "reach_id", "") or ""
+            if not reach:
+                return None, ""
+
+        key = (reach, series)
+        if key not in self.model:
+            found, retrieval = self.forecasts.reach_streamflow(reach, series)
+            self._keep(retrieval)
+            self.model[key] = found
+        return self.model[key], reach
 
     # Provenance --------------------------------------------------------------------
 

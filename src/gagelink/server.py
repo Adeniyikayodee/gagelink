@@ -160,6 +160,35 @@ TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "get_model_forecast",
+        "description": (
+            "National Water Model streamflow for the reach a monitoring location sits on. "
+            "These are modelled values, not measurements: the model covers reaches with "
+            "no gauge on them, so a figure here may have nothing observed behind it, and "
+            "it carries no record-quality grade. Series are analysis_assimilation, which "
+            "looks back, and short_range, medium_range, medium_range_blend, and "
+            "long_range, which look forward. Not every reach publishes every series."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "identifier": {"type": "string"},
+                "series": {
+                    "type": "string",
+                    "enum": [
+                        "analysis_assimilation",
+                        "short_range",
+                        "medium_range",
+                        "medium_range_blend",
+                        "long_range",
+                    ],
+                    "default": "short_range",
+                },
+            },
+            "required": ["identifier"],
+        },
+    },
+    {
         "name": "navigate_network",
         "description": (
             "Monitoring locations upstream or downstream of a point, following the river "

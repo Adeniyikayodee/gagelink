@@ -173,3 +173,81 @@ def test_the_forecast_appears_in_the_manifest():
         manifest = work.manifest()
     assert manifest["retrievals"][0]["collection"].startswith("nwps/")
     assert any(q["field"] == "minor_stage" for q in manifest["quantities"])
+
+
+# The National Water Model ------------------------------------------------------------------
+
+
+def test_a_modelled_series_is_not_an_observation():
+    """The model covers reaches with no gauge on them, so a value from it may have nothing
+    measured behind it. It carries no quality grade, because inventing one would let a
+    modelled figure satisfy a floor that observations have to meet."""
+    from gagelink.nwps import model_series_from
+
+    payload = {
+        "shortRange": {
+            "series": {
+                "units": "ft³/s",
+                "referenceTime": "2026-08-20T09:00:00Z",
+                "data": [
+                    {"validTime": "2026-08-20T10:00:00Z", "flow": 3060.0},
+                    {"validTime": "2026-08-20T11:00:00Z", "flow": 3400.0},
+                ],
+            }
+        }
+    }
+    series = model_series_from("4512772", "short_range", payload)
+
+    assert series.is_forecast
+    assert len(series.values) == 2
+    assert series.at().quality is None
+    assert series.at().datum is None
+    assert series.peak[1] == Q(3400.0, "ft**3/s")
+
+
+def test_assimilation_looks_back_rather_than_forward():
+    from gagelink.nwps import model_series_from
+
+    payload = {
+        "analysisAssimilation": {
+            "series": {"units": "ft³/s", "data": [{"validTime": "2026-08-20T07:00:00Z", "flow": 1.0}]}
+        }
+    }
+    assert not model_series_from("1", "analysis_assimilation", payload).is_forecast
+
+
+def test_a_series_the_reach_does_not_publish_is_absent_rather_than_empty():
+    """Not every reach publishes every series, and an empty block is how the service says
+    so rather than an error."""
+    from gagelink.nwps import model_series_from
+
+    assert model_series_from("1", "medium_range", {"mediumRange": {}}) is None
+
+
+def test_the_tool_says_the_values_are_modelled():
+    from gagelink import Session, Toolkit
+
+    reach = {
+        "shortRange": {
+            "series": {"units": "ft³/s", "referenceTime": "2026-08-20T09:00:00Z",
+                       "data": [{"validTime": "2026-08-20T10:00:00Z", "flow": 3060.0}]}
+        }
+    }
+
+    def fetch(url, headers):
+        return 200, {}, json.dumps(reach if "reaches" in url else GAUGE)
+
+    with Session(forecasts=Forecasts(fetch=fetch)) as work:
+        out = Toolkit(work).get_model_forecast("USGS-01646500").to_dict()
+
+    assert out["data"]["reach"] == "4512772"
+    assert "not measurements" in " ".join(out["notes"])
+
+
+def test_an_unknown_series_is_refused_with_the_list():
+    from gagelink import ErrorCode, Session, Toolkit
+
+    with Session(forecasts=Forecasts(fetch=serving())) as work:
+        result = Toolkit(work).get_model_forecast("USGS-01646500", series="tomorrow")
+    assert result.error == ErrorCode.INVALID_ARGUMENTS
+    assert "short_range" in result.repair

@@ -156,8 +156,10 @@ def test_the_conditions_differ_only_in_the_interface():
     from one condition having been given better data."""
     from bench.conditions import HTTP_ONLY, TOOLKIT, TOOLKIT_PLAIN, plain, schemas
 
+    from gagelink.server import TOOLS
+
     assert len(schemas(HTTP_ONLY)) == 1
-    assert len(schemas(TOOLKIT)) == len(schemas(TOOLKIT_PLAIN)) == 11
+    assert len(schemas(TOOLKIT)) == len(schemas(TOOLKIT_PLAIN)) == len(TOOLS)
 
     framed = {"value": 3.03, "unit": "ft", "datum": "GAGE:01646500", "quality": "provisional"}
     assert plain(framed) == 3.03

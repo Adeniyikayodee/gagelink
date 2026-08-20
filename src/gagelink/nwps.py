@@ -30,6 +30,8 @@ from typing import Any, Mapping
 
 from quantity_guard import Q, datums
 
+from .normalise import parse_unit
+
 from .service import (
     USER_AGENT,
     Fetch,
@@ -101,6 +103,7 @@ class Gauge:
     lid: str
     name: str
     usgs_id: str | None = None
+    reach_id: str | None = None
     latitude: float | None = None
     longitude: float | None = None
     timezone: str | None = None
@@ -206,6 +209,7 @@ def gauge_from(payload: Mapping[str, Any]) -> Gauge:
         lid=str(payload.get("lid") or ""),
         name=str(payload.get("name") or ""),
         usgs_id=str(payload.get("usgsId") or "") or None,
+        reach_id=str(payload.get("reachId") or "") or None,
         latitude=payload.get("latitude"),
         longitude=payload.get("longitude"),
         timezone=TIMEZONES.get(str(payload.get("timeZone") or "")),
@@ -219,6 +223,94 @@ def gauge_from(payload: Mapping[str, Any]) -> Gauge:
         forecast_flow=forecast_flow,
         observed_category=(status.get("observed") or {}).get("floodCategory"),
         forecast_category=(status.get("forecast") or {}).get("floodCategory"),
+    )
+
+
+#: Series the model publishes, in the order of how far ahead they reach. Named as the
+#: service names them in the reach record, rather than as the camel case its streamflow
+#: response uses for the same things.
+MODEL_SERIES = (
+    "analysis_assimilation",
+    "short_range",
+    "medium_range",
+    "medium_range_blend",
+    "long_range",
+)
+
+#: The streamflow response keys the same series in camel case, so one name has two
+#: spellings within one service and a caller should have to know neither.
+_SERIES_KEY = {
+    "analysis_assimilation": "analysisAssimilation",
+    "short_range": "shortRange",
+    "medium_range": "mediumRange",
+    "medium_range_blend": "mediumRangeBlend",
+    "long_range": "longRange",
+}
+
+
+@dataclass(frozen=True)
+class ModelSeries:
+    """A modelled streamflow series, which is not an observation.
+
+    Kept apart from `Gauge` because the difference matters to an answer: a modelled flow
+    at a reach with no gauge on it has no measurement behind it at all, and a reader who
+    cannot tell the two apart will quote one as the other.
+    """
+
+    reach_id: str
+    series: str
+    reference_time: datetime | None
+    values: tuple[tuple[datetime, Q], ...] = ()
+
+    @property
+    def is_forecast(self) -> bool:
+        """Whether the series looks forward. Assimilation looks back."""
+        return self.series != "analysis_assimilation"
+
+    def at(self, index: int = -1) -> Q | None:
+        return self.values[index][1] if self.values else None
+
+    @property
+    def peak(self) -> tuple[datetime, Q] | None:
+        return max(self.values, key=lambda pair: pair[1].magnitude) if self.values else None
+
+
+def model_series_from(
+    reach_id: str, series: str, payload: Mapping[str, Any]
+) -> ModelSeries | None:
+    """Build a modelled series from a `/reaches/{id}/streamflow` response."""
+    block = payload.get(_SERIES_KEY.get(series, series)) or {}
+    inner = block.get("series") if isinstance(block, dict) else None
+    if not isinstance(inner, dict) or not inner.get("data"):
+        return None
+
+    unit = parse_unit(inner.get("units"))
+    reference = inner.get("referenceTime")
+    values = []
+    for point in inner["data"]:
+        flow = _measured(point.get("flow"))
+        moment = point.get("validTime")
+        if flow is None or not moment:
+            continue
+        values.append(
+            (
+                datetime.fromisoformat(str(moment).replace("Z", "+00:00")),
+                # No datum: a discharge has no vertical reference, and no quality grade,
+                # because the service publishes none for model output and inventing one
+                # would let a modelled value pass a floor that observations must meet.
+                Q(flow, unit),
+            )
+        )
+
+    return ModelSeries(
+        reach_id=str(reach_id),
+        series=series,
+        reference_time=(
+            datetime.fromisoformat(str(reference).replace("Z", "+00:00"))
+            if reference
+            else None
+        ),
+        values=tuple(values),
     )
 
 
@@ -270,6 +362,22 @@ class Forecasts:
         return parsed, Retrieval.of(
             f"nwps/{path.strip('/')}", url, {}, status, body, Quota.from_headers(headers)
         )
+
+    def reach_streamflow(
+        self, reach_id: str, series: str = "short_range"
+    ) -> tuple["ModelSeries | None", Retrieval]:
+        """National Water Model streamflow for one river reach.
+
+        The model is reached through the same host as the gauge forecasts, and its output
+        is a modelled series rather than an observation, which is a distinction the
+        payload does not draw and this one does.
+        """
+        payload, retrieval = self.get(f"reaches/{reach_id}/streamflow?series={series}")
+        return model_series_from(reach_id, series, payload), retrieval
+
+    def reach(self, reach_id: str) -> tuple[dict[str, Any], Retrieval]:
+        """The reach record, which names the series it publishes."""
+        return self.get(f"reaches/{reach_id}")
 
     def gauge(self, identifier: str) -> tuple[Gauge, Retrieval]:
         """A forecast point by its NWS location id or by its USGS station number."""

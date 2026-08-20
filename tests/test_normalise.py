@@ -250,3 +250,17 @@ def test_a_reading_on_a_different_datum_is_graded_down():
     """DIFFDATUM is the datum hazard arriving as a qualifier rather than as a frame, and
     nothing downstream would otherwise see it. Observed live on peak record."""
     assert grade("Approved", ["DIFFDATUM"]) == "unverified"
+
+
+def test_thousands_of_cubic_feet_per_second_does_not_cube_the_prefix():
+    """kcfs is a thousand cubic feet per second. Spelling it kilofoot**3/second cubes the
+    prefix instead and is out by a factor of 10^9, which is the error this package exists
+    to prevent, arriving in its own unit table."""
+    assert Q(1, parse_unit("kcfs")).to("ft**3/s").magnitude == pytest.approx(1000)
+
+
+def test_the_superscript_spelling_is_the_same_unit_as_the_caret_one():
+    """The National Water Model writes ft³/s where the observation service writes ft^3/s
+    and the flood categories write cfs. Three spellings of one unit across one agency."""
+    assert parse_unit("ft³/s") == parse_unit("ft^3/s")
+    assert Q(1, parse_unit("m³/s")).to("ft**3/s").magnitude == pytest.approx(35.3147, rel=1e-4)
