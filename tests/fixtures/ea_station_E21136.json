@@ -1,0 +1,89 @@
+{
+ "@context": "http://environment.data.gov.uk/flood-monitoring/meta/context.jsonld",
+ "meta": {
+  "publisher": "Environment Agency",
+  "licence": "http://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
+  "documentation": "http://environment.data.gov.uk/flood-monitoring/doc/reference",
+  "version": "0.9",
+  "comment": "Status: Beta service",
+  "hasFormat": [
+   "http://environment.data.gov.uk/flood-monitoring/id/stations/E21136.rdf",
+   "http://environment.data.gov.uk/flood-monitoring/id/stations/E21136.ttl",
+   "http://environment.data.gov.uk/flood-monitoring/id/stations/E21136.html"
+  ]
+ },
+ "items": {
+  "@id": "http://environment.data.gov.uk/flood-monitoring/id/stations/E21136",
+  "RLOIid": "6177",
+  "catchmentName": "Upper and Bedford Ouse",
+  "dateOpened": "1996-10-01",
+  "datumOffset": 6.3,
+  "eaAreaName": "Anglian - Cambridgeshire and Bedfordshire",
+  "eaRegionName": "Anglian",
+  "easting": 529500,
+  "gridReference": "TL2947271118",
+  "label": "Hemingford",
+  "lat": 52.323618,
+  "long": -0.101287,
+  "measures": {
+   "@id": "http://environment.data.gov.uk/flood-monitoring/id/measures/E21136-level-stage-i-15_min-mASD",
+   "datumType": "http://environment.data.gov.uk/flood-monitoring/def/core/datumASD",
+   "label": "HEMINGFORD GREY SLUICE - level-stage-i-15_min-mASD",
+   "latestReading": {
+    "@id": "http://environment.data.gov.uk/flood-monitoring/data/readings/E21136-level-stage-i-15_min-mASD/2026-08-23T20-00-00Z",
+    "date": "2026-08-23",
+    "dateTime": "2026-08-23T20:00:00Z",
+    "measure": "http://environment.data.gov.uk/flood-monitoring/id/measures/E21136-level-stage-i-15_min-mASD",
+    "value": 0.128
+   },
+   "notation": "E21136-level-stage-i-15_min-mASD",
+   "parameter": "level",
+   "parameterName": "Water Level",
+   "period": 900,
+   "qualifier": "Stage",
+   "station": "http://environment.data.gov.uk/flood-monitoring/id/stations/E21136",
+   "stationReference": "E21136",
+   "type": [
+    "http://environment.data.gov.uk/flood-monitoring/def/core/Measure",
+    "http://environment.data.gov.uk/flood-monitoring/def/core/WaterLevel"
+   ],
+   "unit": "http://qudt.org/1.1/vocab/unit#Meter",
+   "unitName": "mASD",
+   "valueType": "instantaneous"
+  },
+  "northing": 271200,
+  "notation": "E21136",
+  "riverName": "River Great Ouse",
+  "stageScale": {
+   "@id": "http://environment.data.gov.uk/flood-monitoring/id/stations/E21136/stageScale",
+   "datum": 6.3,
+   "highestRecent": {
+    "@id": "http://environment.data.gov.uk/flood-monitoring/id/stations/E21136/stageScale/highestRecent",
+    "dateTime": "2012-12-24T12:45:00",
+    "value": 1.212
+   },
+   "maxOnRecord": {
+    "@id": "http://environment.data.gov.uk/flood-monitoring/id/stations/E21136/stageScale/maxOnRecord",
+    "dateTime": "2012-12-24T12:45:00",
+    "value": 1.212
+   },
+   "minOnRecord": {
+    "@id": "http://environment.data.gov.uk/flood-monitoring/id/stations/E21136/stageScale/minOnRecord",
+    "dateTime": "2007-05-19T23:00:00",
+    "value": 0.024
+   },
+   "scaleMax": 2,
+   "typicalRangeHigh": 0.32,
+   "typicalRangeLow": 0.141
+  },
+  "stationReference": "E21136",
+  "status": "http://environment.data.gov.uk/flood-monitoring/def/core/statusActive",
+  "statusDate": "2021-01-12T10:11:00",
+  "town": "Hemingford Grey",
+  "type": [
+   "http://environment.data.gov.uk/flood-monitoring/def/core/SingleLevel",
+   "http://environment.data.gov.uk/flood-monitoring/def/core/Station"
+  ],
+  "wiskiID": "L33865"
+ }
+}

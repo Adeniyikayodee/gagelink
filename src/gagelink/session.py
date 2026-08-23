@@ -23,7 +23,9 @@ from quantity_guard import __version__ as quantity_guard_version
 from quantity_guard import session as quantity_ledger
 
 from . import __version__
-from .normalise import Location, location_from
+from . import ea
+from .ea import EnvironmentAgency
+from .normalise import Location, Reading, location_from
 from .nldi import Basin, Network, NetworkSite
 from .nwps import Forecasts, Gauge, ModelSeries
 from .swot import Pass, Satellite
@@ -48,6 +50,7 @@ class Session:
         forecasts: Forecasts | None = None,
         network: Network | None = None,
         satellite: Satellite | None = None,
+        agency: EnvironmentAgency | None = None,
         api_key: str | None = None,
         question: str = "",
     ) -> None:
@@ -55,6 +58,7 @@ class Session:
         self.forecasts = forecasts if forecasts is not None else Forecasts()
         self.network = network if network is not None else Network()
         self.satellite = satellite if satellite is not None else Satellite()
+        self.agency = agency if agency is not None else EnvironmentAgency()
         self.question = question
         self.started_at = datetime.now(timezone.utc)
         self.retrievals: list[Retrieval] = []
@@ -118,6 +122,38 @@ class Session:
         station.register()
         self.locations[identifier] = station
         return station
+
+    def ea_location(self, identifier: str) -> Location | None:
+        """An Environment Agency station, fetched once per session.
+
+        The datum is registered by the pack rather than here. Its `station` call registers
+        `GAUGE:<reference>` with `quantity-guard` and, where the service publishes the
+        offset, registers the conversion onto Ordnance Datum, which is the same work
+        `Location.register` does for a USGS site. Doing it twice would register a second
+        name for one frame.
+        """
+        if identifier in self.locations:
+            return self.locations[identifier]
+
+        try:
+            station, retrievals = self.agency.station(ea.reference_of(identifier))
+        except ea.StationNotFound:
+            return None
+        for retrieval in retrievals:
+            self._keep(retrieval)
+        self.locations[identifier] = station
+        return station
+
+    def ea_readings(self, identifier: str) -> list[Reading]:
+        """The latest reading for each measure at an Environment Agency station."""
+        station = self.ea_location(identifier)
+        readings, retrievals = self.agency.readings(
+            ea.reference_of(identifier),
+            datum_name=station.gage_datum if station is not None else None,
+        )
+        for retrieval in retrievals:
+            self._keep(retrieval)
+        return readings
 
     def gauge(self, identifier: str) -> Gauge:
         """A forecast point, fetched once per session.

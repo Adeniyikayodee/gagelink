@@ -278,11 +278,16 @@ class Location:
     site_type: str | None = None
     hydrologic_unit_code: str | None = None
     state: str | None = None
+    #: The datum name an agency's own client has already registered, where one has. Set
+    #: for Environment Agency stations, whose pack registers `GAUGE:<reference>` and the
+    #: offset onto Ordnance Datum before this location is built. Deriving a second name
+    #: here would label a level with a frame nothing can convert.
+    datum_name: str | None = None
 
     @property
     def gage_datum(self) -> str:
         """The name of this station's own datum, which stage is measured from."""
-        return f"GAGE:{self.number}"
+        return self.datum_name or f"GAGE:{self.number}"
 
     def register(self) -> str:
         """Register the station's local datum, and its offset where one is publishable.

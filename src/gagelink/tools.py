@@ -22,7 +22,8 @@ from typing import Any, Callable, Iterable
 
 from quantity_guard import Q
 
-from .normalise import STATISTICS, Reading, readings_from
+from . import ea
+from .normalise import STATISTICS, Location, Reading, readings_from
 from .results import DEFAULT_BUDGET_TOKENS, ErrorCode, Result, unit_text
 from .nldi import DIRECTIONS, NotOnTheNetwork
 from .nwps import MODEL_SERIES, GaugeNotFound
@@ -150,6 +151,40 @@ def _guarded(method: Callable[..., Result]) -> Callable[..., Result]:
     return wrapper
 
 
+#: What each tool needs that the Environment Agency service does not publish. Named per
+#: tool rather than shared, because a model told only that a tool is unavailable will try
+#: the next one, and a model told what is missing can say so in the answer.
+_NOT_AT_EA: dict[str, str] = {
+    "find_locations": "a station search",
+    "get_series": "a time series over a date range",
+    "slice_series": "a time series over a date range",
+    "get_peaks": "an annual peak flow record",
+    "get_forecast": "river forecasts or flood thresholds",
+    "get_model_forecast": "modelled streamflow",
+    "navigate_network": "a river network to navigate",
+    "get_basin": "contributing basin boundaries",
+    "lookup_parameter": "numeric parameter codes",
+}
+
+
+def _uk_refusal(tool: str, identifier: str) -> Result:
+    """A UK identifier reaching a tool that only the American services answer.
+
+    Refused by name rather than by falling through to a USGS lookup, which would report
+    the station as unknown. It exists; this tool cannot answer about it, and those are
+    different facts with different repairs.
+    """
+    missing = _NOT_AT_EA.get(tool, "this")
+    return Result.failure(
+        ErrorCode.INVALID_ARGUMENTS,
+        f"{identifier} is an Environment Agency station and the flood-monitoring service "
+        f"publishes no {missing}",
+        "UK stations answer to describe_location and get_latest only. Report what is "
+        "unavailable rather than substituting a figure from another source or from "
+        "memory.",
+    )
+
+
 def _measured(readings: Iterable[Reading]) -> list[tuple[Reading, Q]]:
     """Readings that hold a value, each paired with it.
 
@@ -271,6 +306,9 @@ class Toolkit:
     @_guarded
     def describe_location(self, identifier: str) -> Result:
         """Metadata for one location, including the frames its readings depend on."""
+        if ea.is_ea(identifier):
+            return self._describe_ea(identifier)
+
         station = self.session.location(identifier)
         if station is None:
             return Result.failure(
@@ -338,6 +376,9 @@ class Toolkit:
         this morning beside a turbidity from several years ago. `max_age_hours` drops the
         stale ones and says which were dropped.
         """
+        if ea.is_ea(identifier):
+            return self._latest_ea(identifier, parameters, max_age_hours)
+
         station = self.session.location(identifier)
         if station is None:
             return Result.failure(
@@ -427,6 +468,9 @@ class Toolkit:
         Dates are ISO, as in 2026-08-01. Resolution is daily or continuous, where
         continuous is the 15-minute record and is large.
         """
+        if ea.is_ea(identifier):
+            return _uk_refusal("get_series", identifier)
+
         if resolution not in {"daily", "continuous"}:
             return Result.failure(
                 ErrorCode.INVALID_ARGUMENTS,
@@ -522,6 +566,9 @@ class Toolkit:
     @_guarded
     def get_peaks(self, identifier: str, limit: int = 10) -> Result:
         """Annual peak flow record, largest first."""
+        if ea.is_ea(identifier):
+            return _uk_refusal("get_peaks", identifier)
+
         page = self.session.items(
             "peaks", monitoring_location_id=identifier, limit=1000
         )
@@ -565,6 +612,9 @@ class Toolkit:
         A stage is a number until it is set against the stage at which the river floods,
         and the two come from different services, so this is where they meet.
         """
+        if ea.is_ea(identifier):
+            return _uk_refusal("get_forecast", identifier)
+
         try:
             gauge = self.session.gauge(identifier)
         except GaugeNotFound:
@@ -658,6 +708,9 @@ class Toolkit:
         which looks back, and short_range, medium_range, medium_range_blend, and
         long_range, which look forward. Not every reach publishes every series.
         """
+        if ea.is_ea(identifier):
+            return _uk_refusal("get_model_forecast", identifier)
+
         if series not in MODEL_SERIES:
             return Result.failure(
                 ErrorCode.INVALID_ARGUMENTS,
@@ -796,6 +849,9 @@ class Toolkit:
         downstream_diversions, where upstream includes tributaries and upstream_main
         follows the main stem alone.
         """
+        if ea.is_ea(identifier):
+            return _uk_refusal("navigate_network", identifier)
+
         if direction not in DIRECTIONS:
             return Result.failure(
                 ErrorCode.INVALID_ARGUMENTS,
@@ -855,6 +911,9 @@ class Toolkit:
         The polygon is held rather than returned, being a couple of thousand coordinate
         pairs that answer a mapping question and no question an agent asks.
         """
+        if ea.is_ea(identifier):
+            return _uk_refusal("get_basin", identifier)
+
         try:
             basin = self.session.basin(identifier)
         except NotOnTheNetwork:
@@ -966,11 +1025,151 @@ class Toolkit:
 
     # Internals ----------------------------------------------------------------------
 
+    # The Environment Agency ------------------------------------------------------------
+
+    def _describe_ea(self, identifier: str) -> Result:
+        """A UK station, described in the same shape as an American one.
+
+        The fields the flood-monitoring service does not publish are absent rather than
+        filled: there is no site type, no catchment code, and no drainage area, and
+        writing a blank into those would read as a station that reported none rather than
+        as an agency that publishes none.
+        """
+        station = self.session.ea_location(identifier)
+        if station is None:
+            return Result.failure(
+                ErrorCode.LOCATION_UNKNOWN,
+                f"no Environment Agency station with the reference "
+                f"{ea.reference_of(identifier)!r}",
+                "UK identifiers are of the form EA-2604TH, using the agency's own station "
+                "reference. There is no search tool for them; references come from "
+                "https://environment.data.gov.uk/flood-monitoring/id/stations.",
+            )
+
+        described: dict[str, Any] = {
+            "id": station.id,
+            "name": station.name,
+            "latitude": station.latitude,
+            "longitude": station.longitude,
+            "timezone": station.timezone,
+            "gage_datum": station.gage_datum,
+            "altitude_of_gage_datum": None
+            if station.altitude is None
+            else self.session.record(
+                "describe_location", "altitude", station.altitude
+            ),
+        }
+        result = Result(ok=True, data=described)
+
+        if station.altitude is None:
+            result.note(
+                f"This station publishes no datum offset, so a level here carries "
+                f"{station.gage_datum} and cannot be converted onto Ordnance Datum. "
+                f"Comparing it against an absolute elevation will be refused rather than "
+                f"answered. Most Environment Agency stations publish none."
+            )
+        else:
+            result.note(
+                f"A level here measured as mASD is on {station.gage_datum}, whose zero is "
+                f"at {station.altitude.magnitude:g} m on Ordnance Datum Newlyn. A level "
+                f"measured as mAOD is already on Ordnance Datum. The two are both metres "
+                f"and are not interchangeable."
+            )
+        result.note(
+            "This is an Environment Agency station. It answers describe_location and "
+            "get_latest; the series, peak, forecast, network, and basin tools cover the "
+            "American services only."
+        )
+        return result
+
+    def _latest_ea(
+        self,
+        identifier: str,
+        parameters: Iterable[str] | None,
+        max_age_hours: float | None,
+    ) -> Result:
+        """The latest reading for each measure at a UK station.
+
+        The staleness handling matters more here than it does upstream, because this
+        service states no record grade at all: a station with a failed sensor keeps
+        serving that sensor's last good value indefinitely, and nothing in the response
+        marks it as old. Age is the only signal there is.
+        """
+        station = self.session.ea_location(identifier)
+        if station is None:
+            return Result.failure(
+                ErrorCode.LOCATION_UNKNOWN,
+                f"no Environment Agency station with the reference "
+                f"{ea.reference_of(identifier)!r}",
+                "UK identifiers are of the form EA-2604TH, using the agency's own station "
+                "reference.",
+            )
+
+        readings = self.session.ea_readings(identifier)
+        if not readings:
+            return Result.failure(
+                ErrorCode.NO_DATA,
+                f"{identifier} publishes no current measurements",
+                "The station record exists but holds no readings. Check the station at "
+                "https://environment.data.gov.uk/flood-monitoring/id/stations.",
+            )
+
+        wanted = [str(p).lower() for p in parameters] if parameters else None
+        if wanted:
+            # Matched on the measure name rather than on a code, since this agency
+            # publishes no numeric vocabulary. Substring rather than equality, because a
+            # question asks for level and the service answers Water Level.
+            matched = [
+                r for r in readings
+                if any(w in r.parameter_code.lower() for w in wanted)
+            ]
+            if not matched:
+                published = sorted({r.parameter_code for r in readings})
+                return Result.failure(
+                    ErrorCode.PARAMETER_NOT_MEASURED,
+                    f"{identifier} does not measure {', '.join(sorted(set(wanted)))}",
+                    f"This station measures {', '.join(published)}. Names are the "
+                    f"agency's own; there are no numeric parameter codes at this service.",
+                )
+            readings = matched
+
+        now = datetime.now(timezone.utc)
+        dropped: list[str] = []
+        kept: list[Reading] = []
+        for reading in readings:
+            if max_age_hours is not None and reading.is_stale(
+                timedelta(hours=max_age_hours), now
+            ):
+                dropped.append(reading.parameter_code)
+            else:
+                kept.append(reading)
+
+        result = Result(
+            ok=True,
+            data={
+                "location": station.id,
+                "readings": [self._render_reading(r, now) for r in kept],
+            },
+        )
+        if dropped:
+            result.note(
+                f"dropped as older than {max_age_hours:g} hours: {', '.join(dropped)}"
+            )
+        result.note(
+            "The Environment Agency publishes no record grade on live data, so these "
+            "readings are neither provisional nor approved and are returned ungraded. "
+            "Age is the only staleness signal this service gives."
+        )
+        return result
+
     def _render_reading(self, reading: Reading, now: datetime) -> dict[str, Any]:
         age = reading.age(now)
         rendered: dict[str, Any] = {
             "parameter_code": reading.parameter_code,
-            "parameter": COMMON_PARAMETERS.get(reading.parameter_code),
+            # A USGS code is numeric and needs the lookup. An Environment Agency measure
+            # is already the name the agency publishes, so it stands as its own.
+            "parameter": COMMON_PARAMETERS.get(reading.parameter_code)
+            or (None if reading.parameter_code.isdigit() else reading.parameter_code),
             "statistic": reading.statistic,
             "value": None
             if reading.value is None

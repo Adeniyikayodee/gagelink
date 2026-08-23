@@ -14,7 +14,7 @@ Pre-alpha, and the API will change.
 
 #: Single source of truth for the version; pyproject reads it from here, so the packaged
 #: metadata and the attribute cannot drift apart.
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 from .normalise import (
     Location,
@@ -32,6 +32,7 @@ from .nldi import Basin, Network, NetworkSite, NotOnTheNetwork, ring_area
 from .nwps import MODEL_SERIES, Forecasts, Gauge, GaugeNotFound, ModelSeries, Threshold
 from .replay import OFFLINE, REVISION_AWARE, STRICT, ReplayReport, replay
 from .results import ErrorCode, Result
+from .ea import EnvironmentAgency
 from .server import Server, serve_stdio
 from .streamable import serve_http
 from .session import Session
@@ -98,6 +99,7 @@ __all__ = [
     "GaugeNotFound",
     "Threshold",
     "Result",
+    "EnvironmentAgency",
     "Server",
     "Session",
     "serve_http",

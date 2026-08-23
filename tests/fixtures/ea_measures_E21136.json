@@ -1,0 +1,40 @@
+{
+ "@context": "http://environment.data.gov.uk/flood-monitoring/meta/context.jsonld",
+ "meta": {
+  "publisher": "Environment Agency",
+  "licence": "http://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
+  "documentation": "http://environment.data.gov.uk/flood-monitoring/doc/reference",
+  "version": "0.9",
+  "comment": "Status: Beta service",
+  "hasFormat": [
+   "http://environment.data.gov.uk/flood-monitoring/id/stations/E21136/measures.csv",
+   "http://environment.data.gov.uk/flood-monitoring/id/stations/E21136/measures.rdf",
+   "http://environment.data.gov.uk/flood-monitoring/id/stations/E21136/measures.ttl",
+   "http://environment.data.gov.uk/flood-monitoring/id/stations/E21136/measures.html"
+  ]
+ },
+ "items": [
+  {
+   "@id": "http://environment.data.gov.uk/flood-monitoring/id/measures/E21136-level-stage-i-15_min-mASD",
+   "datumType": "http://environment.data.gov.uk/flood-monitoring/def/core/datumASD",
+   "label": "HEMINGFORD GREY SLUICE - level-stage-i-15_min-mASD",
+   "latestReading": {
+    "@id": "http://environment.data.gov.uk/flood-monitoring/data/readings/E21136-level-stage-i-15_min-mASD/2026-08-23T20-00-00Z",
+    "date": "2026-08-23",
+    "dateTime": "2026-08-23T20:00:00Z",
+    "measure": "http://environment.data.gov.uk/flood-monitoring/id/measures/E21136-level-stage-i-15_min-mASD",
+    "value": 0.128
+   },
+   "notation": "E21136-level-stage-i-15_min-mASD",
+   "parameter": "level",
+   "parameterName": "Water Level",
+   "period": 900,
+   "qualifier": "Stage",
+   "station": "http://environment.data.gov.uk/flood-monitoring/id/stations/E21136",
+   "stationReference": "E21136",
+   "unit": "http://qudt.org/1.1/vocab/unit#Meter",
+   "unitName": "mASD",
+   "valueType": "instantaneous"
+  }
+ ]
+}

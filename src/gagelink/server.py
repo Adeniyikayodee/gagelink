@@ -41,9 +41,11 @@ SUPPORTED_PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26", "2024-11-05")
 #: models made in the quantity-guard evaluation. Latest against current is a live payload
 #: at Little Falls holding a discharge from this morning beside a turbidity from 2019. The
 #: unit warning is four spellings of one quantity across two agencies.
-INSTRUCTIONS = """Hydrology data for rivers, gages, forecasts, and basins, from USGS, NOAA, and the SWOT satellite. Use it for questions about streamflow, river level, flood risk, water quality, drainage areas, and what lies upstream or downstream of a point.
+INSTRUCTIONS = """Hydrology data for rivers, gages, forecasts, and basins, from USGS, NOAA, the UK Environment Agency, and the SWOT satellite. Use it for questions about streamflow, river level, flood risk, water quality, drainage areas, and what lies upstream or downstream of a point.
 
 Identifiers are of the form USGS-01646500, with the agency prefix and the leading zero. Use find_locations to search by state, county, or bounding box if you have a place name rather than a number.
+
+UK stations are EA-2604TH, using the Environment Agency's own reference. They answer describe_location and get_latest only: that service publishes no series, peaks, forecast, network, or basin, and no record grade at all. There is no search for them, so a UK question needs the reference. Everything else here is the United States.
 
 Four things decide whether an answer is right.
 
@@ -90,7 +92,8 @@ TOOLS: list[dict[str, Any]] = [
             "Metadata for one monitoring location: its name, position, drainage area, "
             "timezone, and the vertical datum its stage readings are measured from. Call "
             "this before comparing any stage against an elevation, because the answer "
-            "depends on the offset it returns."
+            "depends on the offset it returns. Takes a USGS identifier or an Environment "
+            "Agency one, as in EA-2604TH."
         ),
         "inputSchema": {
             "type": "object",
@@ -106,7 +109,9 @@ TOOLS: list[dict[str, Any]] = [
             "for each parameter independently, so one response can carry a discharge from "
             "this morning beside a turbidity from years ago. Pass max_age_hours to drop "
             "the stale ones. Values arrive with their unit, datum, and whether the record "
-            "is provisional or approved."
+            "is provisional or approved. Takes a USGS identifier or an Environment Agency "
+            "one, as in EA-2604TH, whose measures are named rather than coded and whose "
+            "readings carry no grade at all."
         ),
         "inputSchema": {
             "type": "object",

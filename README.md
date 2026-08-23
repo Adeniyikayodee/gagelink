@@ -1,7 +1,8 @@
 # gagelink
 
 Hydrology data for AI agents. River level, streamflow, flood forecasts, water quality,
-drainage basins, and satellite water surface elevation, from USGS, NOAA, and SWOT. Every
+drainage basins, and satellite water surface elevation, from USGS, NOAA, the UK
+Environment Agency, and SWOT. Every
 value carries its unit, the datum it is measured from, its timezone, and whether the record
 is provisional or approved.
 
@@ -231,6 +232,44 @@ inside the tool as well, including a field renamed by the service, which is the 
 failure a client of a migrating API will meet: it arrives as `INTERNAL_ERROR` with a repair
 saying to report the data as unavailable, rather than as a dead turn. The session resets on
 `initialize`, so one conversation's quantities cannot appear in another's manifest.
+
+## The UK, and where coverage stops
+
+Most of this is American. The USGS, NOAA, and NLDI services behind eleven of the thirteen
+tools cover the United States and nowhere else.
+
+UK stations work through the Environment Agency flood-monitoring service, using the
+agency's own reference:
+
+```
+describe_location  EA-E21136   ->  Hemingford, datum GAUGE:E21136, zero at 6.3 m on ODN
+get_latest         EA-E21136   ->  Water Level 0.128 m on GAUGE:E21136, Flow in m^3/s
+```
+
+The client is `quantity_guard.packs.ea` rather than a second implementation written here,
+because it already knows the thing that matters about this service: a level is published
+either as `mASD`, metres above the station's own datum, or as `mAOD`, metres above Ordnance
+Datum Newlyn, and differencing one against the other is dimensionally valid and physically
+wrong. That is gage datum against NAVD88 in a different vocabulary, and it behaves the same
+way here — a level converts onto Ordnance Datum where the station publishes its offset, and
+is refused where it does not, which is most stations.
+
+Three limits, stated rather than left to be found:
+
+- **Two tools, not thirteen.** UK identifiers answer `describe_location` and `get_latest`.
+  The series, peak, forecast, model, network, and basin tools refuse by name against an
+  `EA-` identifier, because the service publishes none of those. A refusal says what is
+  missing rather than reporting the station as unknown.
+- **No search.** There is no way to find a UK station by name or place through these tools.
+  References come from https://environment.data.gov.uk/flood-monitoring/id/stations.
+- **No record grade.** The live service publishes none — neither a measure nor a reading
+  carries one, and `qualifier` names the measurement position rather than the quality of
+  the record. UK readings are returned ungraded, so the provisional-against-approved
+  distinction the USGS tools rest on has no counterpart, and age is the only staleness
+  signal there is.
+
+Beyond those two agencies, SWOT satellite elevations are global, and ERA5, GRACE, and
+HydroBASINS are global but library-only rather than tools. CAMELS is the US variant.
 
 ## Freeboard, which is where the hazards meet
 

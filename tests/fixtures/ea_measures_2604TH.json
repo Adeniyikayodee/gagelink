@@ -1,0 +1,61 @@
+{
+ "@context": "http://environment.data.gov.uk/flood-monitoring/meta/context.jsonld",
+ "meta": {
+  "publisher": "Environment Agency",
+  "licence": "http://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
+  "documentation": "http://environment.data.gov.uk/flood-monitoring/doc/reference",
+  "version": "0.9",
+  "comment": "Status: Beta service",
+  "hasFormat": [
+   "http://environment.data.gov.uk/flood-monitoring/id/stations/2604TH/measures.csv",
+   "http://environment.data.gov.uk/flood-monitoring/id/stations/2604TH/measures.rdf",
+   "http://environment.data.gov.uk/flood-monitoring/id/stations/2604TH/measures.ttl",
+   "http://environment.data.gov.uk/flood-monitoring/id/stations/2604TH/measures.html"
+  ]
+ },
+ "items": [
+  {
+   "@id": "http://environment.data.gov.uk/flood-monitoring/id/measures/2604TH-level-stage-i-15_min-mASD",
+   "datumType": "http://environment.data.gov.uk/flood-monitoring/def/core/datumASD",
+   "label": "RIVER THAMES AT MAIDENHEAD - level-stage-i-15_min-mASD",
+   "latestReading": {
+    "@id": "http://environment.data.gov.uk/flood-monitoring/data/readings/2604TH-level-stage-i-15_min-mASD/2026-08-23T20-30-00Z",
+    "date": "2026-08-23",
+    "dateTime": "2026-08-23T20:30:00Z",
+    "measure": "http://environment.data.gov.uk/flood-monitoring/id/measures/2604TH-level-stage-i-15_min-mASD",
+    "value": 2.187
+   },
+   "notation": "2604TH-level-stage-i-15_min-mASD",
+   "parameter": "level",
+   "parameterName": "Water Level",
+   "period": 900,
+   "qualifier": "Stage",
+   "station": "http://environment.data.gov.uk/flood-monitoring/id/stations/2604TH",
+   "stationReference": "2604TH",
+   "unit": "http://qudt.org/1.1/vocab/unit#Meter",
+   "unitName": "mASD",
+   "valueType": "instantaneous"
+  },
+  {
+   "@id": "http://environment.data.gov.uk/flood-monitoring/id/measures/2604TH-flow--i-15_min-m3_s",
+   "label": "RIVER THAMES AT MAIDENHEAD - flow--i-15_min-m3_s",
+   "latestReading": {
+    "@id": "http://environment.data.gov.uk/flood-monitoring/data/readings/2604TH-flow--i-15_min-m3_s/2026-08-23T20-30-00Z",
+    "date": "2026-08-23",
+    "dateTime": "2026-08-23T20:30:00Z",
+    "measure": "http://environment.data.gov.uk/flood-monitoring/id/measures/2604TH-flow--i-15_min-m3_s",
+    "value": 4.743
+   },
+   "notation": "2604TH-flow--i-15_min-m3_s",
+   "parameter": "flow",
+   "parameterName": "Flow",
+   "period": 900,
+   "qualifier": "",
+   "station": "http://environment.data.gov.uk/flood-monitoring/id/stations/2604TH",
+   "stationReference": "2604TH",
+   "unit": "http://qudt.org/1.1/vocab/unit#CubicMeterPerSecond",
+   "unitName": "m3/s",
+   "valueType": "instantaneous"
+  }
+ ]
+}
