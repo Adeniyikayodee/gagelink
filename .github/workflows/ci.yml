@@ -18,7 +18,12 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: pip install -e ".[dev]"
+      - run: mypy src/gagelink
+      # The catch-all that keeps a fault out of the transport would also keep one out of
+      # this suite, so the suite runs with it disarmed.
       - run: pytest -q
+        env:
+          GAGELINK_RAISE: "1"
       - name: demo runs offline
         run: python demo/freeboard.py
       - name: benchmark harness runs offline

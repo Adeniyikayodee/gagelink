@@ -84,7 +84,7 @@ class Granule:
     @property
     def needs_credentials(self) -> bool:
         """Whether the file sits behind Earthdata login, which the protected path means."""
-        return bool(self.href) and "protected" in self.href
+        return "protected" in (self.href or "")
 
 
 def granule_from(collection: str, entry: Mapping[str, Any]) -> Granule:

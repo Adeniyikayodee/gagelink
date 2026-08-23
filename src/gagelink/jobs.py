@@ -220,6 +220,13 @@ class Archive:
                 f"job {job.id} is {job.status} after {job.waited():.0f} seconds; "
                 f"check_job again before asking for the result"
             )
+        if job.href is None:
+            # The store reported the job finished and published nothing to fetch. Named
+            # rather than dereferenced, because the failure otherwise arrives as a type
+            # error inside urllib and reads as a bug here.
+            raise JobNotReady(
+                f"job {job.id} reports {job.status} and published no file to fetch"
+            )
         request = urllib.request.Request(job.href, headers={"User-Agent": USER_AGENT})
         with urllib.request.urlopen(request, timeout=300, context=_trust_store()) as response:
             data = response.read()

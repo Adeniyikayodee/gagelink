@@ -18,6 +18,9 @@ MCP client configuration:
 No account is needed. A free key from https://api.waterdata.usgs.gov/signup raises the
 allowance from 50 requests an hour to 1000; set it as GAGELINK_API_KEY.
 
+For a client that cannot spawn a process, `gagelink-mcp --http` serves the same tools over
+Streamable HTTP at http://127.0.0.1:8765/mcp, on loopback and with no authentication.
+
 ## Questions it answers
 
 - How high is the river at a gage, and how does that compare with flood stage?

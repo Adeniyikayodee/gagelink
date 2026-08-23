@@ -9,6 +9,8 @@ import pytest
 from gagelink import Service, Session
 from gagelink.nldi import Network
 from gagelink.nwps import Forecasts
+from gagelink.results import ErrorCode
+from gagelink.schema import validate
 from gagelink.server import PROTOCOL_VERSION, TOOLS, Server, serve_stdio
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -154,7 +156,7 @@ def test_a_private_attribute_is_not_reachable_as_a_tool(server):
 
 def test_the_manifest_is_a_tool_so_a_model_can_be_told_to_end_with_it(server):
     server.call_tool("get_latest", {"identifier": "USGS-07374000"})
-    manifest = text(server.call_tool("export_manifest", {}))
+    manifest = text(server.call_tool("export_manifest", {}))["data"]
 
     assert [r["collection"] for r in manifest["retrievals"]] == [
         "monitoring-locations",
@@ -169,10 +171,10 @@ def test_initialising_again_clears_the_previous_conversation(server):
     from gagelink.server import dispatch
 
     server.call_tool("get_latest", {"identifier": "USGS-07374000"})
-    assert text(server.call_tool("export_manifest", {}))["retrievals"]
+    assert text(server.call_tool("export_manifest", {}))["data"]["retrievals"]
 
     dispatch(server, "initialize", {})
-    assert text(server.call_tool("export_manifest", {}))["retrievals"] == []
+    assert text(server.call_tool("export_manifest", {}))["data"]["retrievals"] == []
 
 
 def test_the_result_is_held_to_the_budget():
@@ -215,3 +217,136 @@ def test_the_instructions_stay_small_enough_to_send_every_time():
     from gagelink.server import INSTRUCTIONS
 
     assert len(INSTRUCTIONS) < 3000
+
+
+# Failure, and what a client can rely on -------------------------------------------------------
+
+
+def test_a_fault_inside_a_tool_is_a_failure_and_not_a_protocol_error(server, monkeypatch):
+    """A field renamed upstream is the likeliest failure this package will ever see.
+
+    Ending the turn on it loses the repair, the quota count, and any chance the model has
+    of saying what went wrong, so it comes back as a result like any other failure.
+    """
+    monkeypatch.delenv("GAGELINK_RAISE", raising=False)
+
+    def renamed(*args, **kwargs):
+        raise KeyError("properties")
+
+    monkeypatch.setattr(server.session, "items", renamed)
+    response = server.call_tool("get_latest", {"identifier": "USGS-07374000"})
+
+    assert response["isError"] is True
+    body = text(response)
+    assert body["error"] == "INTERNAL_ERROR"
+    assert "KeyError" in body["message"]
+    assert "from memory" in body["repair"]
+
+
+def test_a_fault_can_be_made_to_raise_so_the_suite_still_sees_it(server, monkeypatch):
+    """The catch-all must not hide a bug from the tests that exist to find it."""
+    monkeypatch.setenv("GAGELINK_RAISE", "1")
+
+    def renamed(*args, **kwargs):
+        raise KeyError("properties")
+
+    monkeypatch.setattr(server.session, "items", renamed)
+    with pytest.raises(KeyError):
+        server.call_tool("get_latest", {"identifier": "USGS-07374000"})
+
+
+def test_an_argument_the_schema_does_not_name_is_reported_against_the_schema(server):
+    body = text(server.call_tool("describe_location", {"identifier": "USGS-07374000", "depth": 3}))
+    assert body["error"] == "INVALID_ARGUMENTS"
+    assert "depth is not an argument" in body["message"]
+
+
+def test_a_missing_required_argument_says_which(server):
+    body = text(server.call_tool("describe_location", {}))
+    assert body["error"] == "INVALID_ARGUMENTS"
+    assert "identifier is required" in body["message"]
+
+
+def test_an_argument_of_the_wrong_type_says_what_was_wanted(server):
+    body = text(server.call_tool("get_peaks", {"identifier": "USGS-07374000", "limit": "ten"}))
+    assert body["error"] == "INVALID_ARGUMENTS"
+    assert "should be integer" in body["message"]
+
+
+def test_an_unknown_tool_names_the_ones_that_exist(server):
+    body = text(server.call_tool("drop_database", {}))
+    assert body["error"] == "INVALID_ARGUMENTS"
+    assert "describe_location" in body["repair"]
+
+
+# The declared contract ------------------------------------------------------------------------
+
+
+def test_every_tool_declares_a_title_an_output_schema_and_annotations():
+    for tool in TOOLS:
+        assert tool["title"], tool["name"]
+        assert tool["outputSchema"]["type"] == "object"
+        assert tool["annotations"]["readOnlyHint"] is True
+        assert tool["annotations"]["destructiveHint"] is False
+
+
+def test_nothing_here_writes_so_a_client_has_one_thing_to_ask_about():
+    """Thirteen read-only tools should cost a user one consent, not thirteen prompts."""
+    assert all(t["annotations"]["readOnlyHint"] for t in TOOLS)
+    manifest = next(t for t in TOOLS if t["name"] == "export_manifest")
+    assert manifest["annotations"]["openWorldHint"] is False
+
+
+def test_a_result_is_returned_as_data_as_well_as_text(server):
+    """The package's claim is that a value carries its frame. Structured output is what
+    lets a client read the frame as a field instead of parsing it out of a string."""
+    response = server.call_tool("describe_location", {"identifier": "USGS-07374000"})
+    assert response["structuredContent"] == json.loads(response["content"][0]["text"])
+    assert response["structuredContent"]["data"]["gage_datum"]
+
+
+@pytest.mark.parametrize(
+    "name, arguments",
+    [
+        ("describe_location", {"identifier": "USGS-07374000"}),
+        ("get_latest", {"identifier": "USGS-07374000"}),
+        ("export_manifest", {}),
+        ("describe_location", {}),  # a failure has to conform to the schema too
+    ],
+)
+def test_what_a_tool_returns_matches_what_it_declared(server, name, arguments):
+    declared = next(t for t in TOOLS if t["name"] == name)
+    response = server.call_tool(name, arguments)
+    assert validate(response["structuredContent"], declared["outputSchema"]) == []
+
+
+def test_every_error_code_is_declared_in_the_output_schema():
+    """A code the schema does not list is one a client cannot be written against."""
+    declared = next(t for t in TOOLS if t["name"] == "get_latest")
+    assert set(declared["outputSchema"]["properties"]["error"]["enum"]) == set(ErrorCode.all())
+
+
+# Protocol -------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("asked", ["2025-06-18", "2025-03-26", "2024-11-05"])
+def test_a_client_is_answered_in_the_revision_it_asked_for(server, asked):
+    from gagelink.server import dispatch
+
+    result = dispatch(server, "initialize", {"protocolVersion": asked})
+    assert result["protocolVersion"] == asked
+
+
+def test_a_revision_this_server_does_not_speak_is_answered_in_the_newest(server):
+    from gagelink.server import dispatch
+
+    result = dispatch(server, "initialize", {"protocolVersion": "1999-01-01"})
+    assert result["protocolVersion"] == PROTOCOL_VERSION
+
+
+def test_every_tool_conforms_to_its_own_schema_when_it_fails(server):
+    """Called with nothing, most of these fail. A failure is the path a client is most
+    likely to meet and the one least likely to be checked, so it is checked here."""
+    for tool in TOOLS:
+        response = server.call_tool(tool["name"], {})
+        assert validate(response["structuredContent"], tool["outputSchema"]) == [], tool["name"]

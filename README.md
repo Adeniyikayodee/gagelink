@@ -199,9 +199,26 @@ gagelink-mcp
 {"mcpServers": {"gagelink": {"command": "gagelink-mcp"}}}
 ```
 
-Eleven tools, no more. A model degrades as its tool list grows, so the surface is organised
-by verb and the choice of which service answers is made by the server rather than put to the
-caller.
+Thirteen tools, no more. A model degrades as its tool list grows, so the surface is
+organised by verb and the choice of which service answers is made by the server rather than
+put to the caller. All thirteen read and none writes, and each says so in its annotations,
+so a client has one thing to ask a user about rather than thirteen.
+
+Every result comes back twice: as text, and as structured content matching the tool's
+declared `outputSchema`. That is what lets a client read a unit, a datum, or a record grade
+as a field rather than parsing it back out of a string, which is the thing this package
+tells everyone else not to do.
+
+For a client that cannot spawn a process, the same server speaks Streamable HTTP:
+
+```bash
+gagelink-mcp --http                 # http://127.0.0.1:8765/mcp
+```
+
+It binds to loopback, checks the `Origin` of every request, and gives each conversation its
+own session and its own toolkit, so two people on one process do not share a manifest. There
+is no authentication, so `--host` on a reachable interface hands your hourly allowance to
+anyone who can route to it.
 
 The tool descriptions are part of the product rather than documentation of it. In the
 quantity-guard evaluation, declaring physical metadata in the schema without enforcing it
@@ -209,7 +226,10 @@ still recovered a third of the runs that failed at baseline, so what a descripti
 datums, units, and provisional record does work before any validation runs.
 
 A tool failure comes back as content marked in error rather than as a protocol fault, which
-keeps the repair in front of the model instead of ending the turn. The session resets on
+keeps the repair in front of the model instead of ending the turn. That holds for a fault
+inside the tool as well, including a field renamed by the service, which is the likeliest
+failure a client of a migrating API will meet: it arrives as `INTERNAL_ERROR` with a repair
+saying to report the data as unavailable, rather than as a dead turn. The session resets on
 `initialize`, so one conversation's quantities cannot appear in another's manifest.
 
 ## Freeboard, which is where the hazards meet

@@ -214,7 +214,12 @@ def _compare(before: str, after: str) -> list[ValueChange]:
         elif before_value is None and after_value is None:
             continue
 
-        source = now or was
+        source = now if now is not None else was
+        if source is None:
+            # Unreachable: a key with a value on neither side was skipped above. Stated
+            # rather than assumed, since the alternative is an attribute error on a
+            # difference that would then go unreported.
+            continue
         changes.append(
             ValueChange(
                 location=key[0],

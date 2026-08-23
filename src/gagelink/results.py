@@ -52,6 +52,17 @@ class ErrorCode:
     SERVICE_UNAVAILABLE = "SERVICE_UNAVAILABLE"
     INVALID_ARGUMENTS = "INVALID_ARGUMENTS"
     UNKNOWN_HANDLE = "UNKNOWN_HANDLE"
+    INTERNAL_ERROR = "INTERNAL_ERROR"
+
+    #: Every code, for the schema that declares what a failure may say. Kept derived
+    #: rather than written twice, so a new code cannot be added and left undeclared.
+    @classmethod
+    def all(cls) -> list[str]:
+        return sorted(
+            value
+            for name, value in vars(cls).items()
+            if name.isupper() and isinstance(value, str)
+        )
 
 
 def unit_text(units: Any) -> str:

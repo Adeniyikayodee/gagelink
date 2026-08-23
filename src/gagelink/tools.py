@@ -13,6 +13,8 @@ in a context window.
 from __future__ import annotations
 
 import hashlib
+import inspect
+import os
 import statistics
 from datetime import datetime, timedelta, timezone
 from functools import wraps
@@ -81,15 +83,38 @@ def _peaks_note(result: Result, partial: bool, found: int, limit: int) -> Result
     return result
 
 
+#: Set to re-raise inside a tool instead of returning INTERNAL_ERROR. A catch-all makes a
+#: server that survives a fault, and it also makes one that hides a fault from its own test
+#: suite. This is the seam between the two, and the tests set it.
+RAISE_INTERNAL = "GAGELINK_RAISE"
+
+
 def _guarded(method: Callable[..., Result]) -> Callable[..., Result]:
-    """Turn a transport failure into a result the model can act on.
+    """Turn a failure inside a tool into a result the model can act on.
 
     A raised exception ends the turn. A failure carrying a repair keeps the model in the
     conversation, where the quantity-guard benchmark measured it recovering.
+
+    Three kinds of failure are told apart, because each has a different repair. An
+    exhausted quota is waited out or keyed. An unavailable service is retried. Anything
+    else is a fault in this package, most likely a field renamed upstream, and the only
+    honest repair is to report the data as unavailable rather than to try again.
+
+    That last clause is why the catch-all is here rather than left to the transport. This
+    package is a client of a service in active migration, whose field names are scheduled
+    to change under it, and a KeyError on a renamed field is the likeliest failure it will
+    ever see. Ending the turn on it would lose the quota count, the manifest entry, and any
+    chance the model has of saying what went wrong.
+
+    A wrong argument is not caught. It is the caller's error, Python already describes it
+    well, and a library caller should get the TypeError a Python function owes them; the
+    server turns it into a typed failure at the boundary where the caller is a model.
     """
+    signature = inspect.signature(method)
 
     @wraps(method)
     def wrapper(self: "Toolkit", *args: Any, **kwargs: Any) -> Result:
+        signature.bind(self, *args, **kwargs)  # a TypeError here is the caller's to fix
         try:
             result = method(self, *args, **kwargs)
         except QuotaExhausted as exc:
@@ -107,10 +132,76 @@ def _guarded(method: Callable[..., Result]) -> Callable[..., Result]:
                 "Retry once. If it fails again, report that the service is unavailable "
                 "rather than supplying a value from memory.",
             )
+        except Exception as exc:
+            if os.environ.get(RAISE_INTERNAL):
+                raise
+            result = Result.failure(
+                ErrorCode.INTERNAL_ERROR,
+                f"{method.__name__} failed inside gagelink: {type(exc).__name__}: {exc}",
+                "This is a fault in the tool rather than in the request, so repeating the "
+                "call will fail the same way. Report the data as unavailable and do not "
+                "supply a value from memory. A field renamed by the service is the "
+                "likeliest cause, and it is worth reporting at "
+                "https://github.com/Adeniyikayodee/gagelink/issues.",
+            )
         result.quota_remaining = self.session.quota_remaining
         return result
 
     return wrapper
+
+
+def _measured(readings: Iterable[Reading]) -> list[tuple[Reading, Q]]:
+    """Readings that hold a value, each paired with it.
+
+    A reading with no value is a gap in the record and not a measurement of anything, so
+    every statistic here is over the ones that hold something. Pairing rather than
+    filtering is what lets the value be used afterwards without a second check at each
+    site, and without the checks that were missing being written as assumptions.
+    """
+    return [(reading, value) for reading in readings if (value := reading.value) is not None]
+
+
+def _iso(value: str) -> datetime | None:
+    """A date argument parsed, or None if it is not a date.
+
+    `Z` is normalised because `fromisoformat` did not accept it before Python 3.11 and
+    this package supports 3.10, and a date written the way the services write it should
+    not fail on the interpreter version.
+    """
+    try:
+        return datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _bad_dates(**given: str | None) -> Result | None:
+    """A failure naming any date argument that is not a date, or None if they all are.
+
+    An unparseable date used to reach the service, which answered with no record for a
+    range it could not read, and that arrived as NO_DATA. The repair on NO_DATA sends the
+    model to widen the range or check the parameter, and neither is the fix: the data was
+    never missing and the date was never read. A wrong argument has to say so.
+    """
+    named = [(name, value) for name, value in given.items() if value is not None]
+    wrong = [f"{name}={value!r}" for name, value in named if _iso(value) is None]
+    if wrong:
+        return Result.failure(
+            ErrorCode.INVALID_ARGUMENTS,
+            f"not a date: {', '.join(wrong)}",
+            "Dates are ISO 8601, as in 2026-08-01, or 2026-08-01T09:15:00Z where the time "
+            "matters. Correct the argument; this is not a range that holds no record.",
+        )
+
+    parsed = {name: _iso(value) for name, value in named}
+    start, end = parsed.get("start"), parsed.get("end")
+    if start is not None and end is not None and start > end:
+        return Result.failure(
+            ErrorCode.INVALID_ARGUMENTS,
+            f"start {given['start']!r} falls after end {given['end']!r}",
+            "Put the earlier date first. A reversed range holds nothing, which would "
+            "otherwise come back as though the location published no record.",
+        )
+    return None
 
 
 class Toolkit:
@@ -342,6 +433,9 @@ class Toolkit:
                 f"unknown resolution {resolution!r}",
                 "Resolution is either daily or continuous.",
             )
+        bad = _bad_dates(start=start, end=end)
+        if bad is not None:
+            return bad
 
         station = self.session.location(identifier)
         page = self.session.items(
@@ -390,6 +484,10 @@ class Toolkit:
         end: str | None = None,
     ) -> Result:
         """Narrow a stored series and summarise what remains."""
+        bad = _bad_dates(start=start, end=end)
+        if bad is not None:
+            return bad
+
         stored = self.session.series.get(handle)
         if stored is None:
             return Result.failure(
@@ -428,8 +526,8 @@ class Toolkit:
             "peaks", monitoring_location_id=identifier, limit=1000
         )
         station = self.session.location(identifier)
-        readings = [r for r in readings_from(page, station) if r.value is not None]
-        if not readings:
+        measured = _measured(readings_from(page, station))
+        if not measured:
             return Result.failure(
                 ErrorCode.NO_DATA,
                 f"{identifier} publishes no annual peak record",
@@ -437,27 +535,26 @@ class Toolkit:
                 "recently established location will have none.",
             )
 
-        ranked = sorted(readings, key=lambda r: r.value.magnitude, reverse=True)[:limit]
+        ranked = sorted(measured, key=lambda pair: pair[1].magnitude, reverse=True)[:limit]
         partial = more_pages(page)
-        return Result(
+        result = Result(
             ok=True,
             data={
                 "location": identifier,
                 "peaks": [
                     {
-                        "date": self._stamp(r),
-                        "value": self.session.record("get_peaks", "peak", r.value),
-                        "quality": r.value.quality,
+                        "date": self._stamp(reading),
+                        "value": self.session.record("get_peaks", "peak", value),
+                        "quality": value.quality,
                     }
-                    for r in ranked
+                    for reading, value in ranked
                 ],
                 # The count of peaks, which is not the count of years: a water year can
                 # carry more than one peak record.
-                "peaks_in_record": len(readings),
+                "peaks_in_record": len(measured),
             },
         )
-        result = _peaks_note(result, partial, len(readings), limit)
-        return result
+        return _peaks_note(result, partial, len(measured), limit)
 
     # Forecasts ----------------------------------------------------------------------
 
@@ -586,7 +683,10 @@ class Toolkit:
                 f"analysis_assimilation for recent modelled flow.",
             )
 
-        peak_at, peak = modelled.peak
+        # The series holds points, so a peak exists; the type allows for one that does
+        # not and the answer below reads it, so the absence is handled rather than assumed.
+        highest = modelled.peak
+        peak_at, peak = highest if highest is not None else (None, None)
         for value, field in ((peak, "model_peak"), (modelled.at(), "model_last")):
             if value is not None:
                 self.session.record("get_model_forecast", field, value)
@@ -623,6 +723,10 @@ class Toolkit:
         A reach identifier is a SWORD river reach id, which is not a USGS station number.
         Dates are ISO.
         """
+        bad = _bad_dates(start=start, end=end)
+        if bad is not None:
+            return bad
+
         try:
             passes = self.session.satellite_passes(feature_id, start, end)
         except NoObservations:
@@ -644,9 +748,10 @@ class Toolkit:
             )
 
         for observation in usable:
-            self.session.record(
-                "get_satellite_passes", "elevation", observation.elevation
-            )
+            if observation.elevation is not None:
+                self.session.record(
+                    "get_satellite_passes", "elevation", observation.elevation
+                )
 
         return Result(
             ok=True,
@@ -912,17 +1017,24 @@ class Toolkit:
 
     def _summarise(self, readings: list[Reading]) -> dict[str, Any]:
         """The statistics an answer usually needs, so the points do not have to travel."""
-        values = [r.value for r in readings if r.value is not None]
-        magnitudes = [v.magnitude for v in values]
-        unit = unit_text(values[0].units) if values else None
-        peak = max(readings, key=lambda r: r.value.magnitude)
-        trough = min(readings, key=lambda r: r.value.magnitude)
+        measured = _measured(readings)
+        if not measured:
+            # Every caller filters before getting here, so this is a fault rather than an
+            # empty range. It is raised rather than returned because the guard turns it
+            # into a failure the model can read, which a wrong summary would not be.
+            raise ValueError("a series summary needs at least one reading holding a value")
+
+        values = [value for _, value in measured]
+        magnitudes = [value.magnitude for value in values]
+        unit = unit_text(values[0].units)
+        peak, peak_value = max(measured, key=lambda pair: pair[1].magnitude)
+        trough, trough_value = min(measured, key=lambda pair: pair[1].magnitude)
         grades = sorted({v.quality for v in values if v.quality})
 
         # Summary statistics are entered as derived, so an answer quoting the mean of a
         # series traces to something rather than reading as invented. The points
         # themselves never reach the answer, so nothing else would put them in the ledger.
-        for value in (trough.value, peak.value):
+        for value in (trough_value, peak_value):
             self.session.record("get_series", "series", value)
         if magnitudes:
             self.session.record_derived(
@@ -935,8 +1047,8 @@ class Toolkit:
             "statistic": readings[0].statistic,
             "first": {"time": self._stamp(readings[0]), "value": magnitudes[0]},
             "last": {"time": self._stamp(readings[-1]), "value": magnitudes[-1]},
-            "minimum": {"time": self._stamp(trough), "value": trough.value.magnitude},
-            "maximum": {"time": self._stamp(peak), "value": peak.value.magnitude},
+            "minimum": {"time": self._stamp(trough), "value": trough_value.magnitude},
+            "maximum": {"time": self._stamp(peak), "value": peak_value.magnitude},
             "mean": round(statistics.fmean(magnitudes), 4),
             "quality": grades or None,
         }
@@ -949,5 +1061,6 @@ class Toolkit:
             step = len(readings) / PREVIEW_POINTS
             chosen = [readings[int(i * step)] for i in range(PREVIEW_POINTS)]
         return [
-            {"time": self._stamp(r), "value": r.value.magnitude} for r in chosen
+            {"time": self._stamp(reading), "value": value.magnitude}
+            for reading, value in _measured(chosen)
         ]

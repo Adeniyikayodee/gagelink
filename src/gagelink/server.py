@@ -19,11 +19,19 @@ import sys
 from typing import Any, Callable
 
 from . import __version__
-from .results import DEFAULT_BUDGET_TOKENS, Result
+from .results import DEFAULT_BUDGET_TOKENS, ErrorCode, Result
+from .schema import validate
 from .session import Session
-from .tools import Toolkit
+from .tools import RAISE_INTERNAL, Toolkit
 
 PROTOCOL_VERSION = "2025-06-18"
+
+#: The revisions this server can speak, newest first. A client asking for one of these is
+#: answered in it; a client asking for anything else is answered in the newest, which is
+#: what the specification says to do and is why the list exists rather than a constant.
+#: Nothing here differs between the three except the fields a client may send, which are
+#: additive, so supporting the older two costs nothing and refusing them costs a client.
+SUPPORTED_PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26", "2024-11-05")
 
 #: Sent to the client at handshake and put in front of the model before it calls anything.
 #: This is the one piece of text that reaches every conversation, so it carries the things
@@ -297,6 +305,339 @@ TOOLS: list[dict[str, Any]] = [
         "inputSchema": {"type": "object", "properties": {}},
     },
 ]
+#: What a measured value looks like wherever one appears in a result. This is the package's
+#: whole claim expressed in the protocol: a number arrives with the frame that makes it
+#: mean something, and a client reads the frame as a field rather than parsing it back out
+#: of prose. A length without its datum is the error this exists to prevent.
+QUANTITY: dict[str, Any] = {
+    "type": "object",
+    "description": (
+        "A value with the frame that makes it meaningful. Never use the number without the "
+        "unit, and never compare a length without checking the datum."
+    ),
+    "properties": {
+        "value": {"type": "number"},
+        "unit": {
+            "type": "string",
+            "description": "As the service publishes it, as in ft^3/s, ft, or kcfs",
+        },
+        "datum": {
+            "type": "string",
+            "description": (
+                "The surface a length is measured from, as in NAVD88, NGVD29, EGM2008, or "
+                "the station's own gage datum. Two lengths on different datums cannot be "
+                "differenced."
+            ),
+        },
+        "quality": {
+            "type": "string",
+            "description": "provisional, approved, estimated, or unverified",
+        },
+        "crs": {"type": "string", "description": "For a coordinate, as in EPSG:4326"},
+    },
+    "required": ["value", "unit"],
+}
+
+#: A reference to the quantity definition, written once because it appears in most of the
+#: output schemas below.
+Q_REF: dict[str, Any] = {"$ref": "#/$defs/quantity"}
+
+
+def _returns(data: dict[str, Any], describes: str) -> dict[str, Any]:
+    """The result envelope around one tool's data.
+
+    Every tool answers in the same envelope, so a client learns one shape rather than
+    thirteen. Only `ok` is required: a failure carries `error`, `message`, and `repair`
+    instead of `data`, and several tools include a key only when the service published
+    the thing it names, which is a fact about the record rather than a defect. A schema
+    that required those keys would be declaring something this package cannot promise.
+    """
+    return {
+        "type": "object",
+        "description": describes,
+        "properties": {
+            "ok": {
+                "type": "boolean",
+                "description": "False means the call failed and repair says how to fix it",
+            },
+            "data": {
+                "type": "object",
+                "description": "The answer, present when ok is true",
+                "properties": data,
+                "additionalProperties": True,
+            },
+            "error": {
+                "type": "string",
+                "enum": ErrorCode.all(),
+                "description": "Present when ok is false",
+            },
+            "message": {"type": "string", "description": "What went wrong"},
+            "repair": {
+                "type": "string",
+                "description": "What to do about it. Follow this rather than guessing.",
+            },
+            "requests_remaining_this_hour": {
+                "type": "integer",
+                "description": "The allowance left against the service, for planning",
+            },
+            "notes": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Anything true of the result that its numbers do not say",
+            },
+        },
+        "required": ["ok"],
+        "$defs": {"quantity": QUANTITY},
+    }
+
+
+#: A location as it appears in a list, which is the short form: enough to choose one and
+#: call describe_location on it, not enough to answer from.
+_LOCATION_SUMMARY: dict[str, Any] = {
+    "type": "array",
+    "items": {
+        "type": "object",
+        "properties": {
+            "id": {"type": "string", "description": "As in USGS-01646500"},
+            "name": {"type": "string"},
+            "site_type": {"type": "string"},
+            "state": {"type": "string"},
+        },
+        "additionalProperties": True,
+    },
+}
+
+#: The summary a series is returned as, in place of its points.
+_SERIES_SUMMARY: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "count": {"type": "integer"},
+        "unit": {"type": "string"},
+        "statistic": {"type": "string"},
+        "first": {"type": "object"},
+        "last": {"type": "object"},
+        "minimum": {"type": "object"},
+        "maximum": {"type": "object"},
+        "mean": {"type": "number"},
+        "quality": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Every grade present in the span, not just the commonest",
+        },
+    },
+    "additionalProperties": True,
+}
+
+#: One reading, which is where the unit, datum, and grade actually reach the model.
+_READING: dict[str, Any] = {
+    "type": "array",
+    "items": {
+        "type": "object",
+        "properties": {
+            "parameter_code": {"type": "string"},
+            "parameter": {"type": "string"},
+            "statistic": {"type": "string"},
+            "value": Q_REF,
+            "time": {"type": "string"},
+            "age_hours": {
+                "type": "number",
+                "description": (
+                    "How old this reading is. Latest is not current, and each parameter "
+                    "ages independently."
+                ),
+            },
+            "qualifiers": {"type": "array", "items": {"type": "string"}},
+        },
+        "additionalProperties": True,
+    },
+}
+
+#: What each tool puts in `data`, taken from what the tools return rather than from what
+#: they were meant to. Keys a service publishes only sometimes are declared and not
+#: required, which is the honest reading of a record that is not uniform.
+RETURNS: dict[str, dict[str, Any]] = {
+    "find_locations": {
+        "locations": _LOCATION_SUMMARY,
+        "count": {"type": "integer"},
+    },
+    "describe_location": {
+        "id": {"type": "string"},
+        "name": {"type": "string"},
+        "site_type": {"type": "string"},
+        "state": {"type": "string"},
+        "latitude": {"type": "number", "description": "Decimal degrees, WGS84"},
+        "longitude": {"type": "number", "description": "Decimal degrees, WGS84"},
+        "drainage_area": Q_REF,
+        "altitude_of_gage_datum": Q_REF,
+        "gage_datum": {
+            "type": "string",
+            "description": (
+                "The datum the station's own zero sits on. This is the offset a stage has "
+                "to be shifted by before it can be compared to a surveyed elevation."
+            ),
+        },
+        "timezone": {"type": "string"},
+        "hydrologic_unit_code": {"type": "string"},
+    },
+    "get_latest": {
+        "location": {"type": "string"},
+        "readings": _READING,
+    },
+    "get_series": {
+        "handle": {
+            "type": "string",
+            "description": "Pass to slice_series. Lasts for the session.",
+        },
+        "summary": _SERIES_SUMMARY,
+        "preview": {"type": "array", "items": {"type": "object"}},
+    },
+    "slice_series": {
+        "handle": {"type": "string"},
+        "summary": _SERIES_SUMMARY,
+        "preview": {"type": "array", "items": {"type": "object"}},
+    },
+    "get_peaks": {
+        "location": {"type": "string"},
+        "peaks": {"type": "array", "items": {"type": "object"}},
+        "peaks_in_record": {"type": "integer"},
+    },
+    "get_forecast": {
+        "gauge": {"type": "string"},
+        "usgs_id": {"type": "string"},
+        "name": {"type": "string"},
+        "timezone": {"type": "string"},
+        "observed": {"type": "object"},
+        "forecast": {"type": "object"},
+        "thresholds": {
+            "type": "object",
+            "description": (
+                "Flood categories on the gage's own datum, so they need no shift before "
+                "being compared to a stage from this service or from USGS 00065."
+            ),
+        },
+        "below_minor_flooding": Q_REF,
+    },
+    "get_model_forecast": {
+        "reach": {"type": "string"},
+        "series": {"type": "string"},
+        "looks": {"type": "string"},
+        "issued": {"type": "string"},
+        "points": {"type": "integer"},
+        "first": {"type": "object"},
+        "last": {"type": "object"},
+        "peak": {"type": "object"},
+    },
+    "get_satellite_passes": {
+        "reach": {"type": "string"},
+        "datum": {
+            "type": "string",
+            "description": (
+                "EGM2008, a geoid. Not a national datum and not a gage datum, so an "
+                "elevation here cannot be differenced against a stage or a survey."
+            ),
+        },
+        "passes": {"type": "integer"},
+        "with_an_elevation": {"type": "integer"},
+        "observations": {"type": "array", "items": {"type": "object"}},
+    },
+    "navigate_network": {
+        "from": {"type": "string"},
+        "direction": {"type": "string"},
+        "within_km": {"type": "number"},
+        "locations": _LOCATION_SUMMARY,
+        "count": {"type": "integer"},
+    },
+    "get_basin": {
+        "location": {"type": "string"},
+        "area": Q_REF,
+        "bounding_box": {"type": "object"},
+        "polygon_vertices": {
+            "type": "integer",
+            "description": "The count only. The geometry is never put in an answer.",
+        },
+    },
+    "lookup_parameter": {
+        "parameter_code": {"type": "string"},
+        "name": {"type": "string"},
+        "parameters": {"type": "array", "items": {"type": "object"}},
+    },
+    "export_manifest": {
+        "question": {"type": "string"},
+        "started_at": {"type": "string"},
+        "versions": {
+            "type": "object",
+            "description": "The libraries the answer was computed with",
+        },
+        "retrievals": {
+            "type": "array",
+            "items": {"type": "object"},
+            "description": (
+                "Every request, with its URL, the time it was made, and the hash of what "
+                "came back. This is what a replay checks against."
+            ),
+        },
+        "locations": {"type": "array", "items": {"type": "object"}},
+        "quantities": {
+            "type": "array",
+            "items": {"type": "object"},
+            "description": "Every value the session produced, with its unit and datum",
+        },
+    },
+}
+
+#: What each tool is called in a client's interface, where a name is read by a person
+#: rather than by a model.
+TITLES: dict[str, str] = {
+    "find_locations": "Find monitoring locations",
+    "describe_location": "Describe a location",
+    "get_latest": "Latest readings",
+    "get_series": "Time series",
+    "slice_series": "Slice a series",
+    "get_peaks": "Annual peak flows",
+    "get_forecast": "River forecast and flood thresholds",
+    "get_model_forecast": "Modelled forecast",
+    "get_satellite_passes": "Satellite elevations",
+    "navigate_network": "Navigate the river network",
+    "get_basin": "Contributing basin",
+    "lookup_parameter": "Look up a parameter code",
+    "export_manifest": "Export the session manifest",
+}
+
+#: Every tool here reads and none writes, so a client has no reason to ask a person before
+#: any of them. Saying so is the difference between one consent and thirteen prompts.
+#: `openWorldHint` separates the twelve that call a service from the one that reports what
+#: this session already did.
+_READS_A_SERVICE: dict[str, Any] = {
+    "readOnlyHint": True,
+    "destructiveHint": False,
+    "idempotentHint": True,
+    "openWorldHint": True,
+}
+
+def _annotate(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Attach the parts of a tool declaration that are the same for all of them.
+
+    Written as a pass over the list rather than repeated thirteen times, so that a new
+    tool cannot be added without a title and an output schema: the lookups below raise
+    rather than defaulting, and a test calls this at import.
+    """
+    for tool in tools:
+        name = tool["name"]
+        tool["title"] = TITLES[name]
+        tool["annotations"] = {
+            "title": TITLES[name],
+            **_READS_A_SERVICE,
+            **({"openWorldHint": False} if name == "export_manifest" else {}),
+        }
+        # An argument the schema does not name is a mistake worth reporting as one. Without
+        # this the call reaches Python and comes back as a TypeError about keyword
+        # arguments, which describes the implementation rather than the contract.
+        tool["inputSchema"].setdefault("additionalProperties", False)
+        tool["outputSchema"] = _returns(RETURNS[name], tool["description"].split(".")[0])
+    return tools
+
+
+TOOLS = _annotate(TOOLS)
 
 
 class Server:
@@ -338,35 +679,75 @@ class Server:
 
         A failure comes back as content marked in error rather than as a protocol fault,
         which is what keeps the repair in front of the model instead of ending the turn.
+        Nothing raised in here reaches the transport: the last clause below is the seam
+        that guarantees it, because a protocol fault loses the repair, the quota count,
+        and the model's chance of saying what went wrong.
         """
+        try:
+            return self._call(name, arguments)
+        except Exception as exc:
+            if os.environ.get(RAISE_INTERNAL):
+                raise
+            return self._respond(
+                Result.failure(
+                    ErrorCode.INTERNAL_ERROR,
+                    f"{name} failed inside gagelink: {type(exc).__name__}: {exc}",
+                    "This is a fault in the tool rather than in the request. Report the "
+                    "data as unavailable rather than supplying a value from memory.",
+                ).to_dict(self.budget_tokens),
+                ok=False,
+            )
+
+    def _call(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         assert self.toolkit is not None and self.session is not None
 
+        declared = next((t for t in TOOLS if t["name"] == name), None)
+        if declared is None:
+            known = ", ".join(sorted(t["name"] for t in TOOLS))
+            return self._failed(
+                ErrorCode.INVALID_ARGUMENTS,
+                f"no tool named {name!r}",
+                f"The tools are {known}.",
+            )
+
+        wrong = validate(arguments, declared["inputSchema"])
+        if wrong:
+            # Checked against the schema the model was given rather than against the Python
+            # signature, so the correction names the contract and not the implementation.
+            return self._failed(
+                ErrorCode.INVALID_ARGUMENTS,
+                f"{name}: " + "; ".join(wrong),
+                "Correct the arguments against the tool's schema and call it again.",
+            )
+
         if name == "export_manifest":
-            payload = self.session.manifest()
-            return {"content": [{"type": "text", "text": json.dumps(payload, indent=1)}]}
+            return self._respond(
+                Result(ok=True, data=self.session.manifest()).to_dict(self.budget_tokens),
+                ok=True,
+            )
 
-        method = getattr(self.toolkit, name, None)
-        if method is None or name.startswith("_") or name not in {t["name"] for t in TOOLS}:
-            return {
-                "content": [{"type": "text", "text": f"no tool named {name!r}"}],
-                "isError": True,
-            }
+        method = getattr(self.toolkit, name)
+        result: Result = method(**arguments)
+        return self._respond(result.to_dict(self.budget_tokens), ok=result.ok)
 
-        try:
-            result: Result = method(**arguments)
-        except TypeError as exc:
-            # Wrong or missing arguments, which is the model's error to fix and so belongs
-            # in the conversation rather than in a protocol fault.
-            return {
-                "content": [{"type": "text", "text": f"{name}: {exc}"}],
-                "isError": True,
-            }
+    def _failed(self, code: str, message: str, repair: str) -> dict[str, Any]:
+        failure = Result.failure(code, message, repair)
+        failure.quota_remaining = self.session.quota_remaining if self.session else None
+        return self._respond(failure.to_dict(self.budget_tokens), ok=False)
 
-        body = result.to_dict(self.budget_tokens)
+    def _respond(self, body: dict[str, Any], ok: bool) -> dict[str, Any]:
+        """One result in both the forms a client may read.
+
+        `structuredContent` is the payload as data, which is what lets a client read a
+        unit or a datum as a field instead of parsing it back out of a string. The same
+        payload is repeated as text, which the protocol asks for so that a client written
+        before structured output still sees the answer.
+        """
         response: dict[str, Any] = {
-            "content": [{"type": "text", "text": json.dumps(body, indent=1)}]
+            "content": [{"type": "text", "text": json.dumps(body, indent=1)}],
+            "structuredContent": body,
         }
-        if not result.ok:
+        if not ok:
             response["isError"] = True
         return response
 
@@ -378,8 +759,11 @@ class MethodNotFound(Exception):
 def dispatch(server: Server, method: str, params: dict[str, Any]) -> dict[str, Any]:
     if method == "initialize":
         server.begin_session()
+        asked = params.get("protocolVersion")
         return {
-            "protocolVersion": PROTOCOL_VERSION,
+            "protocolVersion": (
+                asked if asked in SUPPORTED_PROTOCOL_VERSIONS else PROTOCOL_VERSION
+            ),
             "capabilities": {"tools": {}},
             "serverInfo": {
                 "name": "gagelink",
@@ -457,9 +841,77 @@ def main(argv: list[str] | None = None) -> int:
         default=DEFAULT_BUDGET_TOKENS,
         help="ceiling on one tool result, in estimated tokens",
     )
+    parser.add_argument(
+        "--http",
+        action="store_true",
+        help=(
+            "serve over Streamable HTTP instead of stdio, for a client that cannot spawn "
+            "a process. Binds to the loopback address unless --host says otherwise."
+        ),
+    )
+    parser.add_argument("--host", default=None, help="interface to bind, with --http")
+    parser.add_argument("--port", type=int, default=None, help="port to bind, with --http")
+    parser.add_argument("--path", default=None, help="endpoint path, with --http")
+    parser.add_argument(
+        "--allow-origin",
+        action="append",
+        default=None,
+        metavar="HOST",
+        help=(
+            "an additional browser origin that may reach the server, by host. Repeatable. "
+            "Loopback is always allowed; anything else has to be named here, because a "
+            "page the user did not write can otherwise drive a server on their machine."
+        ),
+    )
     args = parser.parse_args(argv)
 
+    if args.http:
+        return _serve_http(args)
+
+    for unusable in ("host", "port", "path", "allow_origin"):
+        if getattr(args, unusable) is not None:
+            parser.error(f"--{unusable.replace('_', '-')} applies only with --http")
+
     serve_stdio(Server(api_key=args.api_key, budget_tokens=args.budget_tokens))
+    return 0
+
+
+def _serve_http(args: argparse.Namespace) -> int:
+    """Run the HTTP endpoint until interrupted.
+
+    Imported here rather than at the top because stdio is the default and nothing about it
+    should depend on the HTTP stack being importable.
+    """
+    from .streamable import DEFAULT_HOST, DEFAULT_PATH, DEFAULT_PORT, LOCAL_HOSTS, serve_http
+
+    host = args.host or DEFAULT_HOST
+    origins = frozenset(LOCAL_HOSTS | {o.lower() for o in (args.allow_origin or [])})
+    httpd = serve_http(
+        lambda: Server(api_key=args.api_key, budget_tokens=args.budget_tokens),
+        host=host,
+        port=args.port or DEFAULT_PORT,
+        path=args.path or DEFAULT_PATH,
+        allowed_origins=origins,
+    )
+    where = f"http://{host}:{httpd.server_address[1]}{args.path or DEFAULT_PATH}"
+    print(f"gagelink {__version__} serving MCP over Streamable HTTP at {where}", file=sys.stderr)
+    if host not in {"127.0.0.1", "localhost", "::1"}:
+        # Worth saying out loud. The server needs no account and enforces no authorisation,
+        # so binding it to a reachable interface hands anyone who can route to it this
+        # machine's share of the hourly allowance.
+        print(
+            f"warning: bound to {host}, which is not loopback. This server has no "
+            "authentication, so anyone who can reach it can spend the API allowance.",
+            file=sys.stderr,
+        )
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        getattr(httpd, "sessions").close_all()
     return 0
 
 

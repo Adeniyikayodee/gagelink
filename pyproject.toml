@@ -56,7 +56,7 @@ gagelink-mcp = "gagelink.server:main"
 gagelink-replay = "gagelink.replay:main"
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "mypy>=1.11"]
 
 [project.urls]
 Homepage = "https://github.com/Adeniyikayodee/gagelink"
@@ -77,3 +77,9 @@ testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-m 'not live'"
 markers = ["live: hits the USGS service; excluded by default"]
+
+[tool.mypy]
+python_version = "3.10"
+packages = ["gagelink"]
+warn_unused_ignores = true
+warn_redundant_casts = true

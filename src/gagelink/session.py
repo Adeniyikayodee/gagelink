@@ -66,7 +66,7 @@ class Session:
         self.basins: dict[str, Basin] = {}
         self.model: dict[tuple[str, str], ModelSeries | None] = {}
         self.passes: dict[tuple[str, str, str], list[Pass]] = {}
-        self.ledger = None
+        self.ledger: Any | None = None
         self._stack: ExitStack | None = None
 
     def __enter__(self) -> "Session":
