@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "gagelink"
 dynamic = ["version"]
-description = "MCP server and Python library giving AI agents hydrology data: river level, streamflow, flood forecasts, basins, and satellite water levels from USGS, NOAA, the UK Environment Agency, and SWOT, with units, datums, and record quality attached."
+description = "MCP server and Python library giving AI agents hydrology data: river level, streamflow, flood forecasts, basins, and satellite water levels from USGS, NOAA, France's Hub'Eau, the UK Environment Agency, and SWOT, with units, datums, and record quality attached."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }

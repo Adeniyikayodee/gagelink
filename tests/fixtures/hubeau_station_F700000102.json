@@ -1,0 +1,69 @@
+{
+ "count": 1,
+ "first": "https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations?code_station=F700000102&format=json&page=1&size=1000",
+ "last": null,
+ "prev": null,
+ "next": null,
+ "api_version": "2.0.1",
+ "data": [
+  {
+   "code_site": "F7000001",
+   "libelle_site": "La Seine à Paris",
+   "code_station": "F700000102",
+   "libelle_station": "La Seine à Paris - Austerlitz - station limni - secours CT",
+   "type_station": "STD",
+   "coordonnee_x_station": 653435.0,
+   "coordonnee_y_station": 6860703.0,
+   "code_projection": 26,
+   "longitude_station": 2.365510635,
+   "latitude_station": 48.84468962,
+   "influence_locale_station": 3,
+   "commentaire_station": "Station limnimétrique depuis 1990, date de la mise en service du lac  Aube. Les données historiques de débits journaliers et les chroniques de hauteur entre 1990 et 2006 sont visibles à cette station. Après 2006, voir la station débitmétrique (https://www.hydroportail.developpement-durable.gouv.fr/stationhydro/F700000103/fiche). Depuis 2020, la présente station est également un secours pour la station débitmétrique et possède donc des données brutes (non validées). Les débits produits sont moins bons qu'à la station débitmétrique qui reste la référence.",
+   "altitude_ref_alti_station": 25.92,
+   "code_systeme_alti_site": 3,
+   "code_commune_station": "75056",
+   "libelle_commune": "PARIS",
+   "code_departement": "75",
+   "code_region": "11",
+   "libelle_region": "ILE-DE-FRANCE",
+   "code_cours_eau": "----0010",
+   "libelle_cours_eau": "La Seine",
+   "uri_cours_eau": "http://id.eaufrance.fr/CEA/----0010",
+   "descriptif_station": "Austerlitz - station limni - secours CT",
+   "date_maj_station": "2024-06-18T00:00:00Z",
+   "date_ouverture_station": "1990-01-01T00:00:00Z",
+   "date_fermeture_station": null,
+   "commentaire_influence_locale_station": "Influencé par le barrage de Suresnes en aval  (totalement ouvert vers H=3 à 3.3m à Austerlitz) et les barrage de Port à l'Anglais et Saint Maurice en amont. Le débit est également influencé par les lacs réservoirs Seine, Marne, Aube et Yonne (écrêtement des crues).",
+   "code_regime_station": 1,
+   "qualification_donnees_station": 20,
+   "code_finalite_station": "1 2 3",
+   "type_contexte_loi_stat_station": 1,
+   "type_loi_station": 2,
+   "code_sandre_reseau_station": [
+    "POH011",
+    "RIC066",
+    "POH048",
+    "POH903",
+    "BSH104"
+   ],
+   "date_debut_ref_alti_station": "1876-01-01T00:00:00Z",
+   "date_activation_ref_alti_station": "2013-11-18T00:00:00Z",
+   "date_maj_ref_alti_station": "2020-07-09T00:00:00Z",
+   "libelle_departement": "PARIS",
+   "en_service": true,
+   "geometry": {
+    "type": "Point",
+    "crs": {
+     "type": "name",
+     "properties": {
+      "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+     }
+    },
+    "coordinates": [
+     2.3655106354242985,
+     48.84468961972986
+    ]
+   }
+  }
+ ]
+}

@@ -23,8 +23,9 @@ from quantity_guard import __version__ as quantity_guard_version
 from quantity_guard import session as quantity_ledger
 
 from . import __version__
-from . import ea
+from . import ea, hubeau
 from .ea import EnvironmentAgency
+from .hubeau import Hydrometry
 from .normalise import Location, Reading, location_from
 from .nldi import Basin, Network, NetworkSite
 from .nwps import Forecasts, Gauge, ModelSeries
@@ -51,6 +52,7 @@ class Session:
         network: Network | None = None,
         satellite: Satellite | None = None,
         agency: EnvironmentAgency | None = None,
+        france: Hydrometry | None = None,
         api_key: str | None = None,
         question: str = "",
     ) -> None:
@@ -59,6 +61,7 @@ class Session:
         self.network = network if network is not None else Network()
         self.satellite = satellite if satellite is not None else Satellite()
         self.agency = agency if agency is not None else EnvironmentAgency()
+        self.france = france if france is not None else Hydrometry()
         self.question = question
         self.started_at = datetime.now(timezone.utc)
         self.retrievals: list[Retrieval] = []
@@ -153,6 +156,54 @@ class Session:
         )
         for retrieval in retrievals:
             self._keep(retrieval)
+        return readings
+
+    def fr_search(self, **filters: Any) -> list[Location]:
+        """Hub'Eau stations matching a filter, registered as they arrive."""
+        stations, retrieval = self.france.stations(**filters)
+        self._keep(retrieval)
+        for station in stations:
+            station.register()
+            self.locations.setdefault(station.id, station)
+        return stations
+
+    def fr_location(self, identifier: str) -> Location | None:
+        """A Hub'Eau station, fetched once per session and registered on arrival.
+
+        Registered through the same `Location.register` the USGS sites use, which names the
+        station's own zero and registers the offset onto the national system where the
+        station publishes an altitude. The Environment Agency is the exception there, not
+        this: its pack registers its own datums, and Hub'Eau has no pack.
+        """
+        if identifier in self.locations:
+            return self.locations[identifier]
+
+        try:
+            station, retrieval = self.france.station(hubeau.reference_of(identifier))
+        except hubeau.StationNotFound:
+            return None
+        self._keep(retrieval)
+        station.register()
+        self.locations[identifier] = station
+        return station
+
+    def fr_readings(self, identifier: str) -> list[Reading]:
+        """The latest level and flow at a Hub'Eau station."""
+        station = self.fr_location(identifier)
+        readings, retrievals = self.france.observations(
+            hubeau.reference_of(identifier),
+            datum=station.gage_datum if station is not None else None,
+        )
+        for retrieval in retrievals:
+            self._keep(retrieval)
+        return readings
+
+    def fr_daily(self, identifier: str, start: str, end: str, quantity: str = "QmnJ") -> list[Reading]:
+        """The elaborated daily record over a range."""
+        readings, retrieval = self.france.daily(
+            hubeau.reference_of(identifier), start, end, quantity=quantity
+        )
+        self._keep(retrieval)
         return readings
 
     def gauge(self, identifier: str) -> Gauge:

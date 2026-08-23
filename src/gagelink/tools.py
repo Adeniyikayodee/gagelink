@@ -22,7 +22,7 @@ from typing import Any, Callable, Iterable
 
 from quantity_guard import Q
 
-from . import ea
+from . import ea, hubeau
 from .normalise import STATISTICS, Location, Reading, readings_from
 from .results import DEFAULT_BUDGET_TOKENS, ErrorCode, Result, unit_text
 from .nldi import DIRECTIONS, NotOnTheNetwork
@@ -155,13 +155,13 @@ def _guarded(method: Callable[..., Result]) -> Callable[..., Result]:
 #: tool rather than shared, because a model told only that a tool is unavailable will try
 #: the next one, and a model told what is missing can say so in the answer.
 _NOT_AT_EA: dict[str, str] = {
-    "find_locations": "a station search",
-    "get_series": "a time series over a date range",
-    "slice_series": "a time series over a date range",
-    "get_peaks": "an annual peak flow record",
-    "get_forecast": "river forecasts or flood thresholds",
+    "find_locations": "station search",
+    "get_series": "time series over a date range",
+    "slice_series": "time series over a date range",
+    "get_peaks": "annual peak flow record",
+    "get_forecast": "river forecast or flood thresholds",
     "get_model_forecast": "modelled streamflow",
-    "navigate_network": "a river network to navigate",
+    "navigate_network": "river network to navigate",
     "get_basin": "contributing basin boundaries",
     "lookup_parameter": "numeric parameter codes",
 }
@@ -182,6 +182,30 @@ def _uk_refusal(tool: str, identifier: str) -> Result:
         "UK stations answer to describe_location and get_latest only. Report what is "
         "unavailable rather than substituting a figure from another source or from "
         "memory.",
+    )
+
+
+#: What each tool needs that Hub'Eau does not publish. Hub'Eau is wider than the
+#: Environment Agency, so this list is shorter: search and a date range are answered.
+_NOT_AT_HUBEAU: dict[str, str] = {
+    "get_peaks": "annual peak flow record",
+    "get_forecast": "river forecast or flood thresholds",
+    "get_model_forecast": "modelled streamflow",
+    "navigate_network": "river network to navigate",
+    "get_basin": "contributing basin boundaries",
+}
+
+
+def _fr_refusal(tool: str, identifier: str) -> Result:
+    """A French identifier reaching a tool only the American services answer."""
+    missing = _NOT_AT_HUBEAU.get(tool, "this")
+    return Result.failure(
+        ErrorCode.INVALID_ARGUMENTS,
+        f"{identifier} is a Hub'Eau station and the French hydrometry service publishes "
+        f"no {missing}",
+        "French stations answer find_locations with country=FR, describe_location, "
+        "get_latest, and get_series. Report what is unavailable rather than substituting "
+        "a figure from another source or from memory.",
     )
 
 
@@ -257,12 +281,31 @@ class Toolkit:
         site_type: str | None = None,
         bbox: str | None = None,
         limit: int = 10,
+        country: str = "US",
+        river: str | None = None,
     ) -> Result:
         """Search for monitoring locations.
 
         `bbox` is west,south,east,north in decimal degrees. At least one filter is
         required, since an unfiltered search returns the national network.
+
+        `country` chooses the agency, since a search has no identifier to read one from.
+        US is the USGS network; FR is Hub'Eau. The other filters carry the meaning each
+        agency gives them, which is stated on each argument rather than assumed to match.
         """
+        if country.strip().upper() in {"FR", "FRA", "FRANCE"}:
+            return self._find_french(
+                river=river, commune=county, department=hydrologic_unit_code,
+                region=state, bbox=bbox, limit=limit,
+            )
+        if river is not None:
+            return Result.failure(
+                ErrorCode.INVALID_ARGUMENTS,
+                "river is a filter of the French network only",
+                "The USGS collection has no river-name filter. Search by state, county, "
+                "hydrologic_unit_code, or bbox, or pass country=FR to search France.",
+            )
+
         filters = {
             "state_name": state,
             "county_name": county,
@@ -275,7 +318,8 @@ class Toolkit:
                 ErrorCode.INVALID_ARGUMENTS,
                 "a search with no filter would return the national network",
                 "Supply at least one of state, county, hydrologic_unit_code, site_type, "
-                "or bbox as west,south,east,north.",
+                "or bbox as west,south,east,north. For France, pass country=FR with "
+                "river, county as the commune, or bbox.",
             )
 
         page = self.session.items(
@@ -308,6 +352,8 @@ class Toolkit:
         """Metadata for one location, including the frames its readings depend on."""
         if ea.is_ea(identifier):
             return self._describe_ea(identifier)
+        if hubeau.is_french(identifier):
+            return self._describe_french(identifier)
 
         station = self.session.location(identifier)
         if station is None:
@@ -378,6 +424,8 @@ class Toolkit:
         """
         if ea.is_ea(identifier):
             return self._latest_ea(identifier, parameters, max_age_hours)
+        if hubeau.is_french(identifier):
+            return self._latest_french(identifier, parameters, max_age_hours)
 
         station = self.session.location(identifier)
         if station is None:
@@ -470,6 +518,9 @@ class Toolkit:
         """
         if ea.is_ea(identifier):
             return _uk_refusal("get_series", identifier)
+        if hubeau.is_french(identifier):
+            bad = _bad_dates(start=start, end=end)
+            return bad if bad is not None else self._series_french(identifier, start, end)
 
         if resolution not in {"daily", "continuous"}:
             return Result.failure(
@@ -568,6 +619,8 @@ class Toolkit:
         """Annual peak flow record, largest first."""
         if ea.is_ea(identifier):
             return _uk_refusal("get_peaks", identifier)
+        if hubeau.is_french(identifier):
+            return _fr_refusal("get_peaks", identifier)
 
         page = self.session.items(
             "peaks", monitoring_location_id=identifier, limit=1000
@@ -614,6 +667,8 @@ class Toolkit:
         """
         if ea.is_ea(identifier):
             return _uk_refusal("get_forecast", identifier)
+        if hubeau.is_french(identifier):
+            return _fr_refusal("get_forecast", identifier)
 
         try:
             gauge = self.session.gauge(identifier)
@@ -710,6 +765,8 @@ class Toolkit:
         """
         if ea.is_ea(identifier):
             return _uk_refusal("get_model_forecast", identifier)
+        if hubeau.is_french(identifier):
+            return _fr_refusal("get_model_forecast", identifier)
 
         if series not in MODEL_SERIES:
             return Result.failure(
@@ -851,6 +908,8 @@ class Toolkit:
         """
         if ea.is_ea(identifier):
             return _uk_refusal("navigate_network", identifier)
+        if hubeau.is_french(identifier):
+            return _fr_refusal("navigate_network", identifier)
 
         if direction not in DIRECTIONS:
             return Result.failure(
@@ -913,6 +972,8 @@ class Toolkit:
         """
         if ea.is_ea(identifier):
             return _uk_refusal("get_basin", identifier)
+        if hubeau.is_french(identifier):
+            return _fr_refusal("get_basin", identifier)
 
         try:
             basin = self.session.basin(identifier)
@@ -1024,6 +1085,236 @@ class Toolkit:
         return Result(ok=True, data=found[0])
 
     # Internals ----------------------------------------------------------------------
+
+    # France, through Hub'Eau -------------------------------------------------------------
+
+    def _find_french(
+        self,
+        river: str | None,
+        commune: str | None,
+        department: str | None,
+        region: str | None,
+        bbox: str | None,
+        limit: int,
+    ) -> Result:
+        """Search the French network, which filters on a river name where USGS cannot."""
+        filters = {
+            "river": river, "commune": commune, "department": department,
+            "region": region, "bbox": bbox,
+        }
+        if not any(filters.values()):
+            return Result.failure(
+                ErrorCode.INVALID_ARGUMENTS,
+                "a search with no filter would return the national network",
+                "For France, supply river as the watercourse name (La Seine, La Loire), "
+                "county as the commune, hydrologic_unit_code as the department number, "
+                "state as the region, or bbox as west,south,east,north.",
+            )
+
+        stations = self.session.fr_search(limit=min(limit, 100), **filters)
+        if not stations:
+            return Result.failure(
+                ErrorCode.NO_DATA,
+                "no French station matched those filters",
+                "Names are the agency's own and are matched in full: a watercourse is "
+                "written as La Seine or Le Rhone with its article. Widen the search or "
+                "check the spelling.",
+            )
+
+        return Result(
+            ok=True,
+            data={
+                "locations": [
+                    {
+                        "id": station.id,
+                        "name": station.name,
+                        "site_type": station.site_type,
+                        "state": station.state,
+                    }
+                    for station in stations
+                ],
+                "count": len(stations),
+            },
+        ).note(
+            "These are Hub'Eau stations. Only stations in service are returned, and the "
+            "identifier is the agency's own station code."
+        )
+
+    def _describe_french(self, identifier: str) -> Result:
+        """A French station, with the frame its levels depend on.
+
+        The altitude is the height of the station's own zero on a national system, and the
+        system arrives as an integer that means nothing without the Sandre nomenclature.
+        It is decoded here, and where the code says unknown or local it is not decoded into
+        a name, because a level that cannot reach a national datum should not look as
+        though it can.
+        """
+        station = self.session.fr_location(identifier)
+        if station is None:
+            return Result.failure(
+                ErrorCode.LOCATION_UNKNOWN,
+                f"no Hub'Eau station with the code {hubeau.reference_of(identifier)!r}",
+                "French identifiers are of the form FR-F700000102, using the agency's own "
+                "station code. Call find_locations with country=FR to search by river, "
+                "commune, or bounding box.",
+            )
+
+        described: dict[str, Any] = {
+            "id": station.id,
+            "name": station.name,
+            "latitude": station.latitude,
+            "longitude": station.longitude,
+            "site_type": station.site_type,
+            "state": station.state,
+            "timezone": station.timezone,
+            "gage_datum": station.gage_datum,
+            "altitude_of_gage_datum": None
+            if station.altitude is None
+            else self.session.record("describe_location", "altitude", station.altitude),
+        }
+        result = Result(ok=True, data=described)
+
+        if station.altitude is None:
+            result.note(
+                f"This station publishes no altitude on a named vertical system, so a "
+                f"level here carries {station.gage_datum} and cannot be converted onto a "
+                f"national datum. Comparing it against an absolute elevation will be "
+                f"refused rather than answered."
+            )
+        else:
+            result.note(
+                f"A level here is a relative height above {station.gage_datum}, whose zero "
+                f"is at {station.altitude.magnitude:g} m on {station.vertical_datum}. Add "
+                f"that offset before comparing a level against an elevation."
+            )
+        result.note(
+            "This is a Hub'Eau station. It answers describe_location, get_latest, and "
+            "get_series; the peak, forecast, model, network, and basin tools cover the "
+            "American services only."
+        )
+        return result
+
+    def _latest_french(
+        self,
+        identifier: str,
+        parameters: Iterable[str] | None,
+        max_age_hours: float | None,
+    ) -> Result:
+        """The latest level and flow at a French station.
+
+        Hub'Eau publishes no unit on any value. A level is millimetres and a flow is litres
+        per second, and both are attached here from a recorded table rather than read from
+        the payload, because there is nothing in the payload to read. A model handed 358000
+        for the Rhone and left to infer the unit has a plausible reading that is wrong by a
+        thousand available to it.
+        """
+        station = self.session.fr_location(identifier)
+        if station is None:
+            return Result.failure(
+                ErrorCode.LOCATION_UNKNOWN,
+                f"no Hub'Eau station with the code {hubeau.reference_of(identifier)!r}",
+                "French identifiers are of the form FR-F700000102, using the agency's own "
+                "station code.",
+            )
+
+        readings = self.session.fr_readings(identifier)
+        if not readings:
+            return Result.failure(
+                ErrorCode.NO_DATA,
+                f"{identifier} published no recent level or flow",
+                "The real-time endpoint holds roughly a month. A station in the reference "
+                "may still be reporting nothing; check another station on the same river "
+                "with find_locations.",
+            )
+
+        if parameters:
+            wanted = {str(p).upper() for p in parameters}
+            # Matched against the agency's quantity codes, H and Q, and against the words
+            # a question uses for them, since a model asking for discharge does not know
+            # that this service calls it Q.
+            for word, code in (("LEVEL", "H"), ("STAGE", "H"), ("HEIGHT", "H"),
+                               ("FLOW", "Q"), ("DISCHARGE", "Q")):
+                if word in wanted:
+                    wanted.add(code)
+            matched = [r for r in readings if r.parameter_code in wanted]
+            if not matched:
+                published = sorted({r.parameter_code for r in readings})
+                return Result.failure(
+                    ErrorCode.PARAMETER_NOT_MEASURED,
+                    f"{identifier} does not publish {', '.join(sorted(parameters))}",
+                    f"This station publishes {', '.join(published)}. Hub'Eau names a "
+                    f"level H and a discharge Q; there are no USGS parameter codes here.",
+                )
+            readings = matched
+
+        now = datetime.now(timezone.utc)
+        kept, dropped = [], []
+        for reading in readings:
+            if max_age_hours is not None and reading.is_stale(
+                timedelta(hours=max_age_hours), now
+            ):
+                dropped.append(reading.parameter_code)
+            else:
+                kept.append(reading)
+
+        result = Result(
+            ok=True,
+            data={
+                "location": station.id,
+                "readings": [self._render_reading(r, now) for r in kept],
+            },
+        )
+        if dropped:
+            result.note(
+                f"dropped as older than {max_age_hours:g} hours: {', '.join(dropped)}"
+            )
+        result.note(
+            "Hub'Eau publishes no unit with any value. A level is millimetres above the "
+            "station's own zero and a discharge is litres per second; both are labelled "
+            "here from the agency's documentation. Do not infer a unit from a magnitude."
+        )
+        return result
+
+    def _series_french(self, identifier: str, start: str, end: str) -> Result:
+        """The daily record over a range, which is the only series this service elaborates.
+
+        Only the daily mean discharge is offered. The real-time endpoint holds about a
+        month and answers one instant at a time, so a date range is the elaborated series
+        or nothing, and that series is validated data which lags the present by a year or
+        more at many stations.
+        """
+        station = self.session.fr_location(identifier)
+        if station is None:
+            return Result.failure(
+                ErrorCode.LOCATION_UNKNOWN,
+                f"no Hub'Eau station with the code {hubeau.reference_of(identifier)!r}",
+                "French identifiers are of the form FR-F700000102.",
+            )
+
+        readings = _measured(self.session.fr_daily(identifier, start, end))
+        if not readings:
+            return Result.failure(
+                ErrorCode.NO_DATA,
+                f"{identifier} published no daily discharge between {start} and {end}",
+                "The elaborated daily series is validated record and lags the present, "
+                "often by a year or more, so a recent range is frequently empty while an "
+                "older one is not. Not every station publishes a discharge at all.",
+            )
+
+        points = [reading for reading, _ in readings]
+        handle = self._store(identifier, "QmnJ", "daily", start, end, points)
+        return Result(
+            ok=True,
+            data={
+                "handle": handle,
+                "summary": self._summarise(points),
+                "preview": self._preview(points),
+            },
+        ).note(
+            f"{len(points)} daily mean discharges are held under this handle, in litres "
+            f"per second, which is the unit Hub'Eau publishes without stating. This is "
+            f"the elaborated series: validated record, which lags the present."
+        )
 
     # The Environment Agency ------------------------------------------------------------
 
@@ -1168,7 +1459,11 @@ class Toolkit:
             "parameter_code": reading.parameter_code,
             # A USGS code is numeric and needs the lookup. An Environment Agency measure
             # is already the name the agency publishes, so it stands as its own.
+            # A USGS code is numeric and needs the lookup. A Hub'Eau code is a letter
+            # whose meaning is in the agency's documentation. An Environment Agency
+            # measure is already the name the agency publishes, so it stands as its own.
             "parameter": COMMON_PARAMETERS.get(reading.parameter_code)
+            or hubeau.QUANTITIES.get(reading.parameter_code)
             or (None if reading.parameter_code.isdigit() else reading.parameter_code),
             "statistic": reading.statistic,
             "value": None

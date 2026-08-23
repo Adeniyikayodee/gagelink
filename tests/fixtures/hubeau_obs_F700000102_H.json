@@ -1,0 +1,29 @@
+{
+ "count": 8494,
+ "first": "https://hubeau.eaufrance.fr/api/v2/hydrometrie/observations_tr?code_entite=F700000102&grandeur_hydro=H&sort=desc&cursor=&size=1",
+ "prev": null,
+ "next": "https://hubeau.eaufrance.fr/api/v2/hydrometrie/observations_tr?code_entite=F700000102&grandeur_hydro=H&sort=desc&cursor=AoJwgNSfmKADPwpGNzAwMDAwMV9GNzAwMDAwMTAyX0hfMjAyNi0wOC0yM1QyMToyMDowMA%3D%3D&size=1",
+ "api_version": "2.0.1",
+ "data": [
+  {
+   "code_site": "F7000001",
+   "code_station": "F700000102",
+   "grandeur_hydro": "H",
+   "date_debut_serie": "2026-08-23T00:05:00Z",
+   "date_fin_serie": "2026-08-23T21:20:00Z",
+   "code_systeme_alti_serie": 31,
+   "date_obs": "2026-08-23T21:20:00Z",
+   "resultat_obs": 910.0,
+   "code_methode_obs": 0,
+   "libelle_methode_obs": "Mesurée",
+   "code_qualification_obs": 16,
+   "libelle_qualification_obs": "Non qualifiée",
+   "longitude": 2.365510635,
+   "latitude": 48.84468962,
+   "code_statut": 4,
+   "libelle_statut": "Brute",
+   "code_continuite": 0,
+   "libelle_continuite": "Continue"
+  }
+ ]
+}

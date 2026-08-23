@@ -1,8 +1,8 @@
 # gagelink
 
 > Hydrology data for AI agents. River level, streamflow, flood forecasts, water quality,
-> drainage basins, and satellite water surface elevation, from USGS, NOAA, the UK
-Environment Agency, and SWOT. Every
+> drainage basins, and satellite water surface elevation, from USGS, NOAA, Hub'Eau, the
+UK Environment Agency, and SWOT. Every
 > value carries its unit, the datum it is measured from, its timezone, and whether the
 > record is provisional or approved.
 

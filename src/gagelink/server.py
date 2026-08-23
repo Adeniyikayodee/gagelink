@@ -45,7 +45,9 @@ INSTRUCTIONS = """Hydrology data for rivers, gages, forecasts, and basins, from 
 
 Identifiers are of the form USGS-01646500, with the agency prefix and the leading zero. Use find_locations to search by state, county, or bounding box if you have a place name rather than a number.
 
-UK stations are EA-2604TH, using the Environment Agency's own reference. They answer describe_location and get_latest only: that service publishes no series, peaks, forecast, network, or basin, and no record grade at all. There is no search for them, so a UK question needs the reference. Everything else here is the United States.
+UK stations are EA-2604TH, using the Environment Agency's own reference. They answer describe_location and get_latest only: that service publishes no series, peaks, forecast, network, or basin, and no record grade at all. There is no search for them, so a UK question needs the reference.
+
+French stations are FR-F700000102, from Hub'Eau. Find them with find_locations and country=FR, by river as La Seine or Le Rhone. They answer describe_location, get_latest, and get_series only. Hub'Eau publishes no unit on any value: a level is millimetres above the station's own zero, a discharge is litres per second, and both are labelled here. Everything else is the United States.
 
 Four things decide whether an answer is right.
 
@@ -67,9 +69,10 @@ TOOLS: list[dict[str, Any]] = [
     {
         "name": "find_locations",
         "description": (
-            "Search USGS monitoring locations by state, county, hydrologic unit, site "
-            "type, or bounding box. At least one filter is required. Returns identifiers "
-            "of the form USGS-01646500, which every other tool takes."
+            "Search monitoring locations by state, county, hydrologic unit, site type, "
+            "or bounding box. At least one filter is required. Returns identifiers of the "
+            "form USGS-01646500, which every other tool takes. Pass country=FR to search "
+            "the French network instead, by river name, commune, department, or bbox."
         ),
         "inputSchema": {
             "type": "object",
@@ -83,6 +86,25 @@ TOOLS: list[dict[str, Any]] = [
                     "description": "west,south,east,north in decimal degrees",
                 },
                 "limit": {"type": "integer", "default": 10},
+                "country": {
+                    "type": "string",
+                    "enum": ["US", "FR"],
+                    "default": "US",
+                    "description": (
+                        "Which network to search, since a search has no identifier to "
+                        "read an agency from. US is USGS; FR is the French Hub'Eau "
+                        "network, where state is the region, county the commune, and "
+                        "hydrologic_unit_code the department number."
+                    ),
+                },
+                "river": {
+                    "type": "string",
+                    "description": (
+                        "Watercourse name, written with its article as the agency writes "
+                        "it: La Seine, Le Rhone. France only; the USGS collection has no "
+                        "river-name filter."
+                    ),
+                },
             },
         },
     },
@@ -92,8 +114,8 @@ TOOLS: list[dict[str, Any]] = [
             "Metadata for one monitoring location: its name, position, drainage area, "
             "timezone, and the vertical datum its stage readings are measured from. Call "
             "this before comparing any stage against an elevation, because the answer "
-            "depends on the offset it returns. Takes a USGS identifier or an Environment "
-            "Agency one, as in EA-2604TH."
+            "depends on the offset it returns. Takes a USGS identifier, an Environment "
+            "Agency one as in EA-2604TH, or a Hub'Eau one as in FR-F700000102."
         ),
         "inputSchema": {
             "type": "object",
@@ -109,9 +131,9 @@ TOOLS: list[dict[str, Any]] = [
             "for each parameter independently, so one response can carry a discharge from "
             "this morning beside a turbidity from years ago. Pass max_age_hours to drop "
             "the stale ones. Values arrive with their unit, datum, and whether the record "
-            "is provisional or approved. Takes a USGS identifier or an Environment Agency "
-            "one, as in EA-2604TH, whose measures are named rather than coded and whose "
-            "readings carry no grade at all."
+            "is provisional or approved. Takes a USGS identifier, an Environment Agency "
+            "one as in EA-2604TH, or a Hub'Eau one as in FR-F700000102, whose values are "
+            "published with no unit at all and are labelled here."
         ),
         "inputSchema": {
             "type": "object",

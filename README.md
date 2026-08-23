@@ -1,8 +1,8 @@
 # gagelink
 
 Hydrology data for AI agents. River level, streamflow, flood forecasts, water quality,
-drainage basins, and satellite water surface elevation, from USGS, NOAA, the UK
-Environment Agency, and SWOT. Every
+drainage basins, and satellite water surface elevation, from USGS, NOAA, Hub'Eau, the
+UK Environment Agency, and SWOT. Every
 value carries its unit, the datum it is measured from, its timezone, and whether the record
 is provisional or approved.
 
@@ -233,13 +233,54 @@ failure a client of a migrating API will meet: it arrives as `INTERNAL_ERROR` wi
 saying to report the data as unavailable, rather than as a dead turn. The session resets on
 `initialize`, so one conversation's quantities cannot appear in another's manifest.
 
-## The UK, and where coverage stops
+## Beyond the United States
 
-Most of this is American. The USGS, NOAA, and NLDI services behind eleven of the thirteen
-tools cover the United States and nowhere else.
+Most of this is American. The USGS, NOAA, and NLDI services behind the forecast, peak,
+model, network, and basin tools cover the United States and nowhere else. Two other agencies
+answer the location and reading tools.
 
-UK stations work through the Environment Agency flood-monitoring service, using the
-agency's own reference:
+### France, through Hub'Eau
+
+```
+find_locations     country=FR, river="La Seine"  ->  FR-F700000102 and its neighbours
+describe_location  FR-F700000102  ->  Seine at Austerlitz, zero at 25.92 m on NGF-IGN69
+get_latest         FR-F700000102  ->  910 mm above the station zero, graded provisional
+get_series         FR-V100001001  ->  daily mean discharge, in litres per second
+```
+
+Open, no account, and wider than the UK service: search, real-time levels and flows, and a
+daily record reaching back to 1925 at some stations. Three things about it decide whether an
+answer is right, and the payload states none of them.
+
+**No value carries a unit.** A level comes back as `910.0` and a flow as `358000.0` with
+nothing beside either. They are millimetres and litres per second. A model reading 358000
+for the Rhone as cubic metres per second is out by a thousand in the direction of a flood,
+and nothing in the response would contradict it. The USGS hazard is four spellings of one
+quantity; this is worse, because there is no spelling at all and the magnitude is plausible
+in the wrong unit.
+
+**The datum is a code, not a name.** A station publishes its zero's altitude and an integer
+naming which vertical system that height is on. The integer means nothing without Sandre
+nomenclature 76, which is published elsewhere. The table is recorded in `hubeau.py`, so
+`code_systeme_alti_site` 3 becomes NGF-IGN69 and an altitude arrives with a readable frame.
+
+**A reading is a relative height.** Every observation carries system 31, "local system,
+relative height" — gage datum in French. The level is on the station's own zero, the
+station's altitude is the offset onto a national system, and where a station publishes no
+altitude the level cannot reach a national datum at all.
+
+Record quality is published, unlike at the Environment Agency, but as two code vocabularies
+that have to be read together: a qualification and a processing status. The weaker of the
+two wins, so a value marked good but raw is provisional.
+
+What Hub'Eau does not publish: peaks, forecasts, modelled flow, a river network, or basins.
+Those tools refuse a `FR-` identifier by name. The daily series is validated record and lags
+the present, often by a year or more, so a recent range is frequently empty while an older
+one is not.
+
+### The UK, through the Environment Agency
+
+UK stations work through the flood-monitoring service, using the agency's own reference:
 
 ```
 describe_location  EA-E21136   ->  Hemingford, datum GAUGE:E21136, zero at 6.3 m on ODN
@@ -268,7 +309,7 @@ Three limits, stated rather than left to be found:
   distinction the USGS tools rest on has no counterpart, and age is the only staleness
   signal there is.
 
-Beyond those two agencies, SWOT satellite elevations are global, and ERA5, GRACE, and
+Beyond those three agencies, SWOT satellite elevations are global, and ERA5, GRACE, and
 HydroBASINS are global but library-only rather than tools. CAMELS is the US variant.
 
 ## Freeboard, which is where the hazards meet
