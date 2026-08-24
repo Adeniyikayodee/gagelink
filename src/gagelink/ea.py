@@ -28,6 +28,7 @@ provisional-against-approved distinction the USGS tools rest on has no counterpa
 
 from __future__ import annotations
 
+import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -51,11 +52,11 @@ MEASURES_COLLECTION = "ea-measures"
 #: station's local timezone here and the two are not the same kind of fact.
 TIMEZONE = "UTC"
 
-Fetch = Callable[[str], str]
+Fetch = Callable[[str], tuple[int, str]]
 
 
-def _http(url: str) -> str:  # pragma: no cover - exercised only against the live service
-    """Fetch a body, verifying against the same trust store as every other service here.
+def _http(url: str) -> tuple[int, str]:  # pragma: no cover - live service only
+    """Fetch a body and its status, verifying against the same trust store as everything else.
 
     The pack ships its own fetch and it calls `urlopen` with no SSL context, so it fails
     verification on an interpreter installed without a system trust store, which is the
@@ -64,8 +65,11 @@ def _http(url: str) -> str:  # pragma: no cover - exercised only against the liv
     difference with no reason behind it.
     """
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(request, timeout=30, context=_trust_store()) as response:
-        return str(response.read().decode())
+    try:
+        with urllib.request.urlopen(request, timeout=30, context=_trust_store()) as response:
+            return response.status, str(response.read().decode())
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read().decode(errors="replace")
 
 
 class StationNotFound(Exception):
@@ -90,33 +94,28 @@ def identifier_of(reference: str) -> str:
 class _Recorder:
     """A fetch that keeps what it fetched, so the pack's calls reach the manifest.
 
-    The pack takes a fetch returning a body and nothing else, which is the right shape for
-    a library that does not care about provenance. This package does, so the URL and the
-    body are captured on the way past and turned into the same `Retrieval` every other
-    service here produces.
+    The pack hands its fetch a URL and wants a body back, which is the right shape for a
+    library that does not care about provenance. This one does, so the status travels
+    alongside the body here and only the body is passed on. Recording a status the client
+    assumed rather than the one the server sent would put a guess in the ledger.
     """
 
     fetch: Fetch
-    seen: list[tuple[str, str]]
+    seen: list[tuple[str, int, str]]
 
     def __call__(self, url: str) -> str:
-        body = self.fetch(url)
-        self.seen.append((url, body))
+        status, body = self.fetch(url)
+        self.seen.append((url, status, body))
         return body
 
 
-def _retrieval(collection: str, url: str, body: str) -> Retrieval:
-    """One recorded request.
-
-    The status is 200 because the pack's fetch raises on anything else and hands back a
-    body only when the request succeeded. Recording it as 200 states what is known rather
-    than leaving the field empty; a failure never reaches here to be misrecorded.
-    """
+def _retrieval(collection: str, url: str, status: int, body: str) -> Retrieval:
+    """One recorded request, carrying the status the service actually returned."""
     return Retrieval.of(
         collection=collection,
         url=url,
         params={},
-        status=200,
+        status=status,
         body=body,
         quota=Quota(),
     )
@@ -188,7 +187,8 @@ class EnvironmentAgency:
             # Named here so it reaches the caller as a missing station.
             raise StationNotFound(f"no EA station with the reference {reference!r}") from exc
         return location_from(record), [
-            _retrieval(STATION_COLLECTION, url, body) for url, body in recorder.seen
+            _retrieval(STATION_COLLECTION, url, status, body)
+            for url, status, body in recorder.seen
         ]
 
     def readings(
@@ -198,7 +198,8 @@ class EnvironmentAgency:
         entries = pack.readings(reference, fetch=recorder, datum_name=datum_name)
         identifier = identifier_of(reference)
         return [reading_from(e, identifier) for e in entries], [
-            _retrieval(MEASURES_COLLECTION, url, body) for url, body in recorder.seen
+            _retrieval(MEASURES_COLLECTION, url, status, body)
+            for url, status, body in recorder.seen
         ]
 
 

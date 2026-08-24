@@ -200,117 +200,78 @@ gagelink-mcp
 {"mcpServers": {"gagelink": {"command": "gagelink-mcp"}}}
 ```
 
-Thirteen tools, no more. A model degrades as its tool list grows, so the surface is
-organised by verb and the choice of which service answers is made by the server rather than
-put to the caller. All thirteen read and none writes, and each says so in its annotations,
-so a client has one thing to ask a user about rather than thirteen.
+Thirteen tools, organised by verb rather than by agency; the server picks the service. All
+thirteen are read-only and annotated as such, so a client prompts once, not thirteen times.
 
-Every result comes back twice: as text, and as structured content matching the tool's
-declared `outputSchema`. That is what lets a client read a unit, a datum, or a record grade
-as a field rather than parsing it back out of a string, which is the thing this package
-tells everyone else not to do.
+Results come back as text and as `structuredContent` against the tool's `outputSchema`, so
+a unit, datum or grade is a field rather than a string to re-parse.
 
-For a client that cannot spawn a process, the same server speaks Streamable HTTP:
+Streamable HTTP, for clients that cannot spawn a process:
 
 ```bash
 gagelink-mcp --http                 # http://127.0.0.1:8765/mcp
 ```
 
-It binds to loopback, checks the `Origin` of every request, and gives each conversation its
-own session and its own toolkit, so two people on one process do not share a manifest. There
-is no authentication, so `--host` on a reachable interface hands your hourly allowance to
-anyone who can route to it.
+Loopback, `Origin` checked, one session and toolkit per conversation. No authentication —
+`--host` on a reachable interface gives away your hourly allowance.
 
 The tool descriptions are part of the product rather than documentation of it. In the
 quantity-guard evaluation, declaring physical metadata in the schema without enforcing it
 still recovered a third of the runs that failed at baseline, so what a description says about
 datums, units, and provisional record does work before any validation runs.
 
-A tool failure comes back as content marked in error rather than as a protocol fault, which
-keeps the repair in front of the model instead of ending the turn. That holds for a fault
-inside the tool as well, including a field renamed by the service, which is the likeliest
-failure a client of a migrating API will meet: it arrives as `INTERNAL_ERROR` with a repair
-saying to report the data as unavailable, rather than as a dead turn. The session resets on
-`initialize`, so one conversation's quantities cannot appear in another's manifest.
+A tool failure is content marked in error, not a protocol fault, so the repair stays in
+front of the model. Same for a fault inside the tool — a field renamed upstream arrives as
+`INTERNAL_ERROR` with a repair, not a dead turn. The session resets on `initialize`.
 
-## Beyond the United States
+## Outside the United States
 
-Most of this is American. The USGS, NOAA, and NLDI services behind the forecast, peak,
-model, network, and basin tools cover the United States and nowhere else. Two other agencies
-answer the location and reading tools.
+The forecast, peak, model, network and basin tools are USGS, NOAA and NLDI, so they are US
+only. Two other agencies answer the location and reading tools.
 
-### France, through Hub'Eau
+### France, Hub'Eau
 
 ```
-find_locations     country=FR, river="La Seine"  ->  FR-F700000102 and its neighbours
-describe_location  FR-F700000102  ->  Seine at Austerlitz, zero at 25.92 m on NGF-IGN69
-get_latest         FR-F700000102  ->  910 mm above the station zero, graded provisional
-get_series         FR-V100001001  ->  daily mean discharge, in litres per second
+find_locations     country=FR, river="La Seine"
+describe_location  FR-F700000102   Seine at Austerlitz, zero at 25.92 m on NGF-IGN69
+get_latest         FR-F700000102   910 mm above station zero, provisional
+get_series         FR-V100001001   daily mean discharge, l/s, back to 1925
 ```
 
-Open, no account, and wider than the UK service: search, real-time levels and flows, and a
-daily record reaching back to 1925 at some stations. Three things about it decide whether an
-answer is right, and the payload states none of them.
+No account. Three traps, none of them visible in the payload:
 
-**No value carries a unit.** A level comes back as `910.0` and a flow as `358000.0` with
-nothing beside either. They are millimetres and litres per second. A model reading 358000
-for the Rhone as cubic metres per second is out by a thousand in the direction of a flood,
-and nothing in the response would contradict it. The USGS hazard is four spellings of one
-quantity; this is worse, because there is no spelling at all and the magnitude is plausible
-in the wrong unit.
+- **Nothing carries a unit.** A level is `910.0` and a flow `358000.0`. They are mm and
+  l/s. Read 358000 as m³/s and you are out by a thousand toward a flood.
+- **The datum is an integer.** `code_systeme_alti_site: 3` means NGF-IGN69. Sandre
+  nomenclature 76 is recorded in `hubeau.py`; codes 0 and 31 decode to no datum at all.
+- **Readings are relative heights.** Every observation is on system 31, the station's own
+  zero. The station altitude is the offset onto a national system, where one is published.
 
-**The datum is a code, not a name.** A station publishes its zero's altitude and an integer
-naming which vertical system that height is on. The integer means nothing without Sandre
-nomenclature 76, which is published elsewhere. The table is recorded in `hubeau.py`, so
-`code_systeme_alti_site` 3 becomes NGF-IGN69 and an altitude arrives with a readable frame.
+Quality is two code vocabularies read together; the weaker wins, so good-but-raw is
+provisional. The station list ignores any filter it does not recognise and returns all 6,468
+stations, so commune and region are matched by code and a name is refused. Series are
+validated record and lag the present, often by a year.
 
-**A reading is a relative height.** Every observation carries system 31, "local system,
-relative height" — gage datum in French. The level is on the station's own zero, the
-station's altitude is the offset onto a national system, and where a station publishes no
-altitude the level cannot reach a national datum at all.
+No peaks, forecasts, modelled flow, network or basins — those tools refuse an `FR-`
+identifier by name.
 
-Record quality is published, unlike at the Environment Agency, but as two code vocabularies
-that have to be read together: a qualification and a processing status. The weaker of the
-two wins, so a value marked good but raw is provisional.
-
-What Hub'Eau does not publish: peaks, forecasts, modelled flow, a river network, or basins.
-Those tools refuse a `FR-` identifier by name. The daily series is validated record and lags
-the present, often by a year or more, so a recent range is frequently empty while an older
-one is not.
-
-### The UK, through the Environment Agency
-
-UK stations work through the flood-monitoring service, using the agency's own reference:
+### The UK, Environment Agency
 
 ```
-describe_location  EA-E21136   ->  Hemingford, datum GAUGE:E21136, zero at 6.3 m on ODN
-get_latest         EA-E21136   ->  Water Level 0.128 m on GAUGE:E21136, Flow in m^3/s
+describe_location  EA-E21136   Hemingford, zero at 6.3 m on ODN
+get_latest         EA-E21136   Water Level 0.128 m on GAUGE:E21136, Flow m^3/s
 ```
 
-The client is `quantity_guard.packs.ea` rather than a second implementation written here,
-because it already knows the thing that matters about this service: a level is published
-either as `mASD`, metres above the station's own datum, or as `mAOD`, metres above Ordnance
-Datum Newlyn, and differencing one against the other is dimensionally valid and physically
-wrong. That is gage datum against NAVD88 in a different vocabulary, and it behaves the same
-way here — a level converts onto Ordnance Datum where the station publishes its offset, and
-is refused where it does not, which is most stations.
+The client is `quantity_guard.packs.ea`. Levels are `mASD`, metres above the station datum,
+or `mAOD`, metres above Ordnance Datum — gage datum against NAVD88 in another vocabulary. A
+level converts onto ODN where the station publishes an offset; 19 of 156 do.
 
-Three limits, stated rather than left to be found:
+Two tools only. No search, so you need the reference:
+https://environment.data.gov.uk/flood-monitoring/id/stations. No record grade either — the
+live service publishes none, so age is the only staleness signal.
 
-- **Two tools, not thirteen.** UK identifiers answer `describe_location` and `get_latest`.
-  The series, peak, forecast, model, network, and basin tools refuse by name against an
-  `EA-` identifier, because the service publishes none of those. A refusal says what is
-  missing rather than reporting the station as unknown.
-- **No search.** There is no way to find a UK station by name or place through these tools.
-  References come from https://environment.data.gov.uk/flood-monitoring/id/stations.
-- **No record grade.** The live service publishes none — neither a measure nor a reading
-  carries one, and `qualifier` names the measurement position rather than the quality of
-  the record. UK readings are returned ungraded, so the provisional-against-approved
-  distinction the USGS tools rest on has no counterpart, and age is the only staleness
-  signal there is.
-
-Beyond those three agencies, SWOT satellite elevations are global, and ERA5, GRACE, and
-HydroBASINS are global but library-only rather than tools. CAMELS is the US variant.
+Elsewhere: SWOT elevations are global; ERA5, GRACE and HydroBASINS are global but
+library-only. CAMELS is the US variant.
 
 ## Freeboard, which is where the hazards meet
 

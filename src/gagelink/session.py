@@ -198,13 +198,25 @@ class Session:
             self._keep(retrieval)
         return readings
 
-    def fr_daily(self, identifier: str, start: str, end: str, quantity: str = "QmnJ") -> list[Reading]:
-        """The elaborated daily record over a range."""
-        readings, retrieval = self.france.daily(
-            hubeau.reference_of(identifier), start, end, quantity=quantity
+    def fr_series(
+        self, identifier: str, start: str, end: str, quantity: str = "QmnJ"
+    ) -> tuple[list[Reading], int]:
+        """An elaborated series over a range, with the count the service still holds.
+
+        The second value is what was left unfetched. It is returned rather than logged
+        because a summary computed over part of a range has to say so in the answer.
+        """
+        station = self.fr_location(identifier)
+        readings, retrievals, withheld = self.france.elaborated(
+            hubeau.reference_of(identifier),
+            start,
+            end,
+            quantity=quantity,
+            datum=station.gage_datum if station is not None else None,
         )
-        self._keep(retrieval)
-        return readings
+        for retrieval in retrievals:
+            self._keep(retrieval)
+        return readings, withheld
 
     def gauge(self, identifier: str) -> Gauge:
         """A forecast point, fetched once per session.

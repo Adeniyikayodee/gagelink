@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import json
 import urllib.parse
+import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from typing import Any, Callable, Iterable, Mapping
@@ -66,10 +67,13 @@ DAILY_COLLECTION = "hubeau-daily"
 UNITS: dict[str, str] = {
     "H": "millimeter",
     "Q": "liter/second",
-    # The elaborated series publish a daily mean discharge and a daily mean level in the
-    # same units as their real-time counterparts.
+    # The elaborated series, in the same units as their real-time counterparts. Each was
+    # confirmed against a live value rather than taken from the code alone: QmM answered
+    # 464615 for the Rhone in January 2024, which is litres per second, and HIXM answered
+    # 2840 at Austerlitz, which is millimetres.
     "QmnJ": "liter/second",
-    "HmnJ": "millimeter",
+    "QmM": "liter/second",
+    "HIXM": "millimeter",
 }
 
 #: What each quantity code measures, for a model that has only the code.
@@ -77,8 +81,37 @@ QUANTITIES: dict[str, str] = {
     "H": "water level, above the station's own zero",
     "Q": "discharge",
     "QmnJ": "daily mean discharge",
-    "HmnJ": "daily mean water level",
+    "QmM": "monthly mean discharge",
+    "HIXM": "monthly maximum water level, above the station's own zero",
 }
+
+#: The quantities the elaborated endpoint serves over a date range, as against the two the
+#: real-time endpoint serves at an instant. There is no daily level series: `HmnJ` reads
+#: like one and the service rejects it, so a question about levels over a range is answered
+#: by the monthly maximum or not at all.
+ELABORATED = ("QmnJ", "QmM", "HIXM")
+
+#: Words a question uses for a quantity this service names with a letter. A model asking
+#: for discharge does not know that Hub'Eau calls it Q.
+SYNONYMS: dict[str, str] = {
+    "LEVEL": "H", "STAGE": "H", "HEIGHT": "H", "WATER LEVEL": "H",
+    "FLOW": "Q", "DISCHARGE": "Q",
+    "DAILY DISCHARGE": "QmnJ", "DAILY FLOW": "QmnJ", "DAILY MEAN DISCHARGE": "QmnJ",
+    "MONTHLY DISCHARGE": "QmM", "MONTHLY FLOW": "QmM", "MONTHLY MEAN DISCHARGE": "QmM",
+    "MONTHLY MAXIMUM LEVEL": "HIXM",
+}
+
+
+def quantity_for(text: str) -> str | None:
+    """The service's code for a quantity named by code or by word, or None if unknown."""
+    raw = str(text).strip()
+    if raw in UNITS:
+        return raw
+    upper = raw.upper()
+    for code in UNITS:
+        if code.upper() == upper:
+            return code
+    return SYNONYMS.get(upper)
 
 #: Vertical systems, from Sandre nomenclature 76, recorded on 2026-08-23. The payload gives
 #: the integer alone, so without this an altitude has no readable frame. Kept here rather
@@ -122,6 +155,40 @@ ALTIMETRIC_SYSTEMS: dict[str, str] = {
     "33": "IGN 2023 Mayotte",
 }
 
+#: The station filters this service actually honours, checked against the live API on
+#: 2026-08-23 by comparing a filtered count against the unfiltered 6,468.
+#:
+#: The check was needed rather than prudent. This endpoint answers 200 and ignores any
+#: parameter it does not recognise, including a fabricated one, so a wrong filter name
+#: returns the whole national network and reads as a result. `libelle_region`,
+#: `libelle_commune`, and `libelle_departement` all look like filters, are documented
+#: nowhere as not being filters, and all three returned every station in France. Only the
+#: names below narrow anything, and nothing outside this set is ever sent.
+SEARCH_FILTERS = frozenset({
+    "code_station",
+    "code_site",
+    "code_departement",
+    "code_region",
+    "code_commune_station",
+    "libelle_cours_eau",
+    "libelle_station",
+    "bbox",
+    "en_service",
+    "size",
+    "format",
+})
+
+#: A department is two or three characters and may carry a letter, as in 2A for Corsica.
+#: A region and a commune are digits. Checked because passing a place name where a code is
+#: wanted is the mistake this service turns into a national listing.
+_CODE_SHAPED = {
+    "code_departement": lambda v: 1 <= len(v) <= 3 and v[0].isdigit(),
+    "code_region": lambda v: v.isdigit(),
+    "code_commune_station": lambda v: v.isdigit() and len(v) == 5,
+}
+
+
+
 #: The code for a station's own zero. A reading carries this, which is what makes it a
 #: relative height rather than an elevation.
 LOCAL_SYSTEM = "31"
@@ -154,7 +221,17 @@ STATUS: dict[str, str] = {
 #: quantity-guard rather than inventing a second one.
 _WORST_FIRST = ["unverified", "provisional", "estimated", "approved"]
 
-Fetch = Callable[[str], str]
+#: A fetch returns the status alongside the body. The status is recorded in the manifest,
+#: and a client that deduced it from the payload would be putting a guess in the ledger.
+Fetch = Callable[[str], tuple[int, str]]
+
+#: The service's own ceiling on a page, which it enforces with a 400.
+MAX_PAGE = 20000
+
+#: How many pages one call will follow. A range longer than this is reported as truncated
+#: rather than fetched, since a question that needs 200,000 daily values is not a question
+#: answered inside a tool call.
+MAX_PAGES = 3
 
 
 class HubeauError(Exception):
@@ -165,14 +242,48 @@ class StationNotFound(HubeauError):
     """No station answers to that code."""
 
 
+class NotACode(HubeauError):
+    """A place name was given where the service only matches a code."""
+
+
 class UnknownQuantity(HubeauError):
     """A quantity code with no recorded unit, which is refused rather than guessed."""
 
 
-def _http(url: str) -> str:  # pragma: no cover - exercised only against the live service
+def _http(url: str) -> tuple[int, str]:  # pragma: no cover - live service only
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(request, timeout=30, context=_trust_store()) as response:
-        return str(response.read().decode())
+    try:
+        with urllib.request.urlopen(request, timeout=30, context=_trust_store()) as response:
+            return response.status, str(response.read().decode())
+    except urllib.error.HTTPError as exc:
+        # The service explains a rejected argument in the body, and that explanation is
+        # worth more to the caller than the status alone.
+        return exc.code, exc.read().decode(errors="replace")
+
+
+def _complaint(payload: Mapping[str, Any]) -> str:
+    """What the service said was wrong with a request, in one line."""
+    errors = payload.get("field_errors")
+    if isinstance(errors, list) and errors:
+        return "; ".join(
+            f"{e.get('field')}: {e.get('message')}" for e in errors if isinstance(e, dict)
+        )
+    return str(payload.get("message") or payload)
+
+
+def _refuse_unknown(filters: Mapping[str, Any]) -> None:
+    """Stop a filter this client has not verified from reaching the service.
+
+    A guard rather than a formality. The endpoint ignores an unrecognised parameter and
+    answers 200 with the whole collection, so a filter added here by name and never checked
+    would silently widen every search that used it instead of failing.
+    """
+    unknown = sorted(set(filters) - SEARCH_FILTERS)
+    if unknown:
+        raise HubeauError(
+            f"{', '.join(unknown)} is not a filter this service honours; it would be "
+            f"ignored and the search would return the national network"
+        )
 
 
 def is_french(identifier: str) -> bool:
@@ -316,21 +427,24 @@ class Hydrometry:
         self._fetch: Fetch = fetch or _http
         self.base_url = base_url
 
-    def _get(self, path: str, collection: str, **params: Any) -> tuple[dict[str, Any], Retrieval]:
+    def _get(
+        self, path: str, collection: str, url: str | None = None, **params: Any
+    ) -> tuple[dict[str, Any], Retrieval]:
         query = {k: v for k, v in params.items() if v is not None}
-        url = f"{self.base_url}/{path}?{urllib.parse.urlencode(query)}"
-        body = self._fetch(url)
+        if url is None:
+            url = f"{self.base_url}/{path}?{urllib.parse.urlencode(query)}"
+        status, body = self._fetch(url)
         try:
             payload = json.loads(body)
         except json.JSONDecodeError as exc:
             raise HubeauError(f"Hub'Eau answered {path} with something that is not JSON") from exc
+        if status >= 400:
+            raise HubeauError(f"Hub'Eau refused {path}: {_complaint(payload)}")
         return payload, Retrieval.of(
             collection=collection,
             url=url,
             params=query,
-            # The service answers a partial page with 206 and a whole one with 200, and
-            # the fetch raises on anything else, so a body here means one of the two.
-            status=206 if payload.get("next") else 200,
+            status=status,
             body=body,
             quota=Quota(),
         )
@@ -341,21 +455,41 @@ class Hydrometry:
         commune: str | None = None,
         department: str | None = None,
         region: str | None = None,
+        station_name: str | None = None,
         bbox: str | None = None,
         limit: int = 10,
         in_service: bool = True,
     ) -> tuple[list[Location], Retrieval]:
+        """Stations matching a filter, using only the filters the service honours.
+
+        The commune and region arguments are codes rather than names: this endpoint
+        matches `code_commune_station` and `code_region` and ignores their `libelle_`
+        counterparts silently, so a name here would return the national network.
+        """
+        filters: dict[str, Any] = {
+            "libelle_cours_eau": river,
+            "code_commune_station": commune,
+            "code_departement": department,
+            "code_region": region,
+            "libelle_station": station_name,
+            "bbox": bbox,
+        }
+        for name, value in filters.items():
+            shape = _CODE_SHAPED.get(name)
+            if value is not None and shape is not None and not shape(str(value).strip()):
+                raise NotACode(
+                    f"{name} matches a code and {value!r} is not one; this endpoint "
+                    f"ignores an unmatched filter and answers with the whole network"
+                )
+        _refuse_unknown(filters)
+
         payload, retrieval = self._get(
             "referentiel/stations",
             STATIONS_COLLECTION,
-            libelle_cours_eau=river,
-            libelle_commune=commune,
-            code_departement=department,
-            libelle_region=region,
-            bbox=bbox,
             en_service="true" if in_service else None,
-            size=limit,
+            size=min(limit, MAX_PAGE),
             format="json",
+            **filters,
         )
         return [location_from(r) for r in payload.get("data") or []], retrieval
 
@@ -394,22 +528,49 @@ class Hydrometry:
                 readings.append(reading_from(row, identifier, datum))
         return readings, retrievals
 
-    def daily(
-        self, code: str, start: str, end: str, quantity: str = "QmnJ", limit: int = 5000
-    ) -> tuple[list[Reading], Retrieval]:
-        """The elaborated daily record, which is where a date range is answered."""
-        payload, retrieval = self._get(
-            "obs_elab",
-            DAILY_COLLECTION,
-            code_entite=code,
-            grandeur_hydro_elab=quantity,
-            date_debut_obs_elab=start,
-            date_fin_obs_elab=end,
-            size=limit,
-        )
+    def elaborated(
+        self, code: str, start: str, end: str, quantity: str = "QmnJ", datum: str | None = None
+    ) -> tuple[list[Reading], list[Retrieval], int]:
+        """An elaborated series over a range, following the service's own paging.
+
+        Returns what was read, what it cost, and how many rows the service holds beyond
+        what was fetched. That last number is the point: the endpoint caps a page at 20,000
+        and hands back a `next` link, and a client that took the first page and said
+        nothing would summarise a third of a record as though it were the whole of it. A
+        31-year request answered 5,000 days ending in 2003 before this was fixed.
+        """
+        if quantity not in ELABORATED:
+            raise UnknownQuantity(
+                f"Hub'Eau elaborates no {quantity!r} series over a date range; it serves "
+                f"{', '.join(ELABORATED)}. A level is real-time only, so a range of levels "
+                f"has to be asked for as HIXM, the monthly maximum."
+            )
+
         identifier = identifier_of(code)
-        rows = payload.get("data") or []
-        return [reading_from(r, identifier, None) for r in rows], retrieval
+        readings: list[Reading] = []
+        retrievals: list[Retrieval] = []
+        url: str | None = None
+        held = 0
+        for _ in range(MAX_PAGES):
+            payload, retrieval = self._get(
+                "obs_elab",
+                DAILY_COLLECTION,
+                url=url,
+                code_entite=code,
+                grandeur_hydro_elab=quantity,
+                date_debut_obs_elab=start,
+                date_fin_obs_elab=end,
+                size=MAX_PAGE,
+            )
+            retrievals.append(retrieval)
+            held = int(payload.get("count") or 0)
+            readings.extend(
+                reading_from(row, identifier, datum) for row in payload.get("data") or []
+            )
+            url = payload.get("next")
+            if not url:
+                break
+        return readings, retrievals, max(0, held - len(readings))
 
 
 __all__ = [

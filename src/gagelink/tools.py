@@ -293,10 +293,17 @@ class Toolkit:
         US is the USGS network; FR is Hub'Eau. The other filters carry the meaning each
         agency gives them, which is stated on each argument rather than assumed to match.
         """
-        if country.strip().upper() in {"FR", "FRA", "FRANCE"}:
+        if country.strip().upper() == "FR":
             return self._find_french(
                 river=river, commune=county, department=hydrologic_unit_code,
                 region=state, bbox=bbox, limit=limit,
+            )
+        if country.strip().upper() != "US":
+            return Result.failure(
+                ErrorCode.INVALID_ARGUMENTS,
+                f"no network is named {country!r}",
+                "country is US for the USGS network or FR for the French one. Those are "
+                "the two this package searches.",
             )
         if river is not None:
             return Result.failure(
@@ -520,7 +527,9 @@ class Toolkit:
             return _uk_refusal("get_series", identifier)
         if hubeau.is_french(identifier):
             bad = _bad_dates(start=start, end=end)
-            return bad if bad is not None else self._series_french(identifier, start, end)
+            return bad if bad is not None else self._series_french(
+                identifier, parameter, start, end
+            )
 
         if resolution not in {"daily", "continuous"}:
             return Result.failure(
@@ -1097,7 +1106,13 @@ class Toolkit:
         bbox: str | None,
         limit: int,
     ) -> Result:
-        """Search the French network, which filters on a river name where USGS cannot."""
+        """Search the French network, which filters on a river name where USGS cannot.
+
+        The commune and region filters take codes, not names. This endpoint ignores a
+        filter it does not recognise and answers with the whole national network, so a
+        place name reaching it would come back as six thousand stations reading as a
+        result. The client refuses one rather than sending it.
+        """
         filters = {
             "river": river, "commune": commune, "department": department,
             "region": region, "bbox": bbox,
@@ -1106,12 +1121,22 @@ class Toolkit:
             return Result.failure(
                 ErrorCode.INVALID_ARGUMENTS,
                 "a search with no filter would return the national network",
-                "For France, supply river as the watercourse name (La Seine, La Loire), "
-                "county as the commune, hydrologic_unit_code as the department number, "
-                "state as the region, or bbox as west,south,east,north.",
+                "For France, supply river as the watercourse name with its article, as in "
+                "La Seine or Le Rhone; hydrologic_unit_code as the department number, as "
+                "in 75; county as the five-digit INSEE commune code; state as the numeric "
+                "region code; or bbox as west,south,east,north.",
             )
 
-        stations = self.session.fr_search(limit=min(limit, 100), **filters)
+        try:
+            stations = self.session.fr_search(limit=min(limit, 100), **filters)
+        except hubeau.NotACode as exc:
+            return Result.failure(
+                ErrorCode.INVALID_ARGUMENTS,
+                str(exc),
+                "The French station list matches communes and regions by code rather than "
+                "by name. Use hydrologic_unit_code for the department number, which is the "
+                "code most questions have, or search by river or bbox instead.",
+            )
         if not stations:
             return Result.failure(
                 ErrorCode.NO_DATA,
@@ -1228,14 +1253,9 @@ class Toolkit:
             )
 
         if parameters:
-            wanted = {str(p).upper() for p in parameters}
-            # Matched against the agency's quantity codes, H and Q, and against the words
-            # a question uses for them, since a model asking for discharge does not know
-            # that this service calls it Q.
-            for word, code in (("LEVEL", "H"), ("STAGE", "H"), ("HEIGHT", "H"),
-                               ("FLOW", "Q"), ("DISCHARGE", "Q")):
-                if word in wanted:
-                    wanted.add(code)
+            # Resolved through the same table the series tool uses, so a word that means
+            # one thing there cannot mean another here.
+            wanted = {hubeau.quantity_for(p) for p in parameters} - {None}
             matched = [r for r in readings if r.parameter_code in wanted]
             if not matched:
                 published = sorted({r.parameter_code for r in readings})
@@ -1275,13 +1295,15 @@ class Toolkit:
         )
         return result
 
-    def _series_french(self, identifier: str, start: str, end: str) -> Result:
-        """The daily record over a range, which is the only series this service elaborates.
+    def _series_french(
+        self, identifier: str, parameter: str, start: str, end: str
+    ) -> Result:
+        """An elaborated series over a range.
 
-        Only the daily mean discharge is offered. The real-time endpoint holds about a
-        month and answers one instant at a time, so a date range is the elaborated series
-        or nothing, and that series is validated data which lags the present by a year or
-        more at many stations.
+        The real-time endpoint holds about a month and answers one instant at a time, so a
+        date range is the elaborated series or nothing. Three are published and a daily
+        level is not among them, so a request for one is refused rather than answered with
+        a discharge, which is what this did before.
         """
         station = self.session.fr_location(identifier)
         if station is None:
@@ -1291,19 +1313,33 @@ class Toolkit:
                 "French identifiers are of the form FR-F700000102.",
             )
 
-        readings = _measured(self.session.fr_daily(identifier, start, end))
-        if not readings:
+        quantity = hubeau.quantity_for(parameter)
+        if quantity not in hubeau.ELABORATED:
+            named = ", ".join(
+                f"{code} for {hubeau.QUANTITIES[code]}" for code in hubeau.ELABORATED
+            )
             return Result.failure(
-                ErrorCode.NO_DATA,
-                f"{identifier} published no daily discharge between {start} and {end}",
-                "The elaborated daily series is validated record and lags the present, "
-                "often by a year or more, so a recent range is frequently empty while an "
-                "older one is not. Not every station publishes a discharge at all.",
+                ErrorCode.INVALID_ARGUMENTS,
+                f"Hub'Eau elaborates no series for {parameter!r} over a date range",
+                f"Ask for {named}. A level is published in real time only, so a range of "
+                f"levels is the monthly maximum or nothing; get_latest returns the "
+                f"current one.",
             )
 
-        points = [reading for reading, _ in readings]
-        handle = self._store(identifier, "QmnJ", "daily", start, end, points)
-        return Result(
+        readings, withheld = self.session.fr_series(identifier, start, end, quantity)
+        measured = _measured(readings)
+        if not measured:
+            return Result.failure(
+                ErrorCode.NO_DATA,
+                f"{identifier} published no {quantity} between {start} and {end}",
+                "The elaborated series is validated record and lags the present, often by "
+                "a year or more, so a recent range is frequently empty while an older one "
+                "is not. Not every station publishes every series.",
+            )
+
+        points = [reading for reading, _ in measured]
+        handle = self._store(identifier, quantity, "elaborated", start, end, points)
+        result = Result(
             ok=True,
             data={
                 "handle": handle,
@@ -1311,10 +1347,18 @@ class Toolkit:
                 "preview": self._preview(points),
             },
         ).note(
-            f"{len(points)} daily mean discharges are held under this handle, in litres "
-            f"per second, which is the unit Hub'Eau publishes without stating. This is "
-            f"the elaborated series: validated record, which lags the present."
+            f"{len(points)} values of {hubeau.QUANTITIES[quantity]} are held under this "
+            f"handle, in {hubeau.UNITS[quantity].replace('liter/second', 'litres per second')}, "
+            f"which Hub'Eau publishes without stating. This is validated record and lags "
+            f"the present."
         )
+        if withheld:
+            result.note(
+                f"the service holds {withheld} more values in this range than were "
+                f"fetched, so the summary describes {len(points)} of {len(points) + withheld}. "
+                f"Narrow the dates, or ask for QmM rather than QmnJ, to cover it."
+            )
+        return result
 
     # The Environment Agency ------------------------------------------------------------
 

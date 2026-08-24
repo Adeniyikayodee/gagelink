@@ -24,13 +24,13 @@ NO_OFFSET = "2604TH"
 WITH_OFFSET = "E21136"
 
 
-def fetch(url: str) -> str:
+def fetch(url: str) -> tuple[int, str]:
     """The recorded service, keyed the way the pack builds its URLs."""
     for reference in (NO_OFFSET, WITH_OFFSET):
         if url.endswith(f"/stations/{reference}"):
-            return (FIXTURES / f"ea_station_{reference}.json").read_text()
+            return 200, (FIXTURES / f"ea_station_{reference}.json").read_text()
         if url.endswith(f"/stations/{reference}/measures"):
-            return (FIXTURES / f"ea_measures_{reference}.json").read_text()
+            return 200, (FIXTURES / f"ea_measures_{reference}.json").read_text()
     raise AssertionError(f"no fixture for {url}")
 
 
@@ -95,7 +95,7 @@ def test_a_station_with_an_offset_states_it_and_says_the_two_are_not_interchange
 
 def test_an_unknown_reference_is_a_missing_station_not_a_crash(tools, monkeypatch):
     def missing(url):
-        return json.dumps({"items": []})
+        return 200, json.dumps({"items": []})
 
     monkeypatch.setattr(tools.session.agency, "_fetch", missing)
     body = tools.describe_location("EA-NOSUCH").to_dict()

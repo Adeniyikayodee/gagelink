@@ -33,27 +33,27 @@ WITHOUT_ALTITUDE = "K001002010"  # La Loire a Cros-de-Georand
 WITH_DAILY = "V100001001"        # Le Rhone a Pougny
 
 
-def fetch(url: str) -> str:
+def fetch(url: str) -> tuple[int, str]:
     """The recorded service, matched on the query the client builds."""
     if "referentiel/stations" in url:
         if f"code_station={WITH_ALTITUDE}" in url:
-            return (FIXTURES / f"hubeau_station_{WITH_ALTITUDE}.json").read_text()
+            return 200, (FIXTURES / f"hubeau_station_{WITH_ALTITUDE}.json").read_text()
         if f"code_station={WITHOUT_ALTITUDE}" in url:
-            return (FIXTURES / f"hubeau_station_{WITHOUT_ALTITUDE}.json").read_text()
+            return 200, (FIXTURES / f"hubeau_station_{WITHOUT_ALTITUDE}.json").read_text()
         if f"code_station={WITH_DAILY}" in url:
-            return (FIXTURES / f"hubeau_station_{WITH_DAILY}.json").read_text()
+            return 200, (FIXTURES / f"hubeau_station_{WITH_DAILY}.json").read_text()
         if "libelle_cours_eau" in url:
-            return (FIXTURES / "hubeau_search_seine.json").read_text()
-        return json.dumps({"count": 0, "data": []})
+            return 206, (FIXTURES / "hubeau_search_seine.json").read_text()
+        return 200, json.dumps({"count": 0, "data": []})
     if "observations_tr" in url:
         quantity = "H" if "grandeur_hydro=H" in url else "Q"
         if f"code_entite={WITH_ALTITUDE}" in url:
-            return (FIXTURES / f"hubeau_obs_{WITH_ALTITUDE}_{quantity}.json").read_text()
-        return json.dumps({"count": 0, "data": []})
+            return 206, (FIXTURES / f"hubeau_obs_{WITH_ALTITUDE}_{quantity}.json").read_text()
+        return 200, json.dumps({"count": 0, "data": []})
     if "obs_elab" in url:
         if f"code_entite={WITH_DAILY}" in url:
-            return (FIXTURES / f"hubeau_daily_{WITH_DAILY}.json").read_text()
-        return json.dumps({"count": 0, "data": []})
+            return 200, (FIXTURES / f"hubeau_daily_{WITH_DAILY}.json").read_text()
+        return 200, json.dumps({"count": 0, "data": []})
     raise AssertionError(f"no fixture for {url}")
 
 
@@ -284,3 +284,83 @@ def test_one_request_per_quantity_is_what_it_costs(session):
     Toolkit(session).get_latest(identifier_of(WITH_ALTITUDE))
     observations = [r for r in session.retrievals if r.collection == "hubeau-observations"]
     assert len(observations) == 2
+
+
+# The three defects found on 2026-08-24 --------------------------------------------------------
+
+
+def test_a_place_name_is_refused_where_the_service_matches_a_code(tools):
+    """This endpoint ignores a filter it does not recognise and answers with the whole
+    national network, so a name reaching it returns 6,468 stations reading as a result."""
+    body = tools.find_locations(country="FR", state="ILE-DE-FRANCE").to_dict()
+
+    assert body["error"] == ErrorCode.INVALID_ARGUMENTS
+    assert "is not one" in body["message"]
+    assert "by code rather than by name" in body["repair"]
+
+
+def test_only_verified_filters_are_ever_sent():
+    """The guard behind the fix: a filter never checked against the live service would
+    silently widen every search that used it."""
+    from gagelink.hubeau import SEARCH_FILTERS, _refuse_unknown, HubeauError
+
+    _refuse_unknown({"libelle_cours_eau": "La Seine"})
+    with pytest.raises(HubeauError, match="not a filter this service honours"):
+        _refuse_unknown({"libelle_region": "ILE-DE-FRANCE"})
+    assert "libelle_region" not in SEARCH_FILTERS
+    assert "libelle_commune" not in SEARCH_FILTERS
+
+
+def test_a_level_over_a_range_is_refused_rather_than_answered_with_a_discharge(tools):
+    """It used to return QmnJ whatever was asked for, so a question about water level got
+    flow in litres per second and nothing said so."""
+    body = tools.get_series(
+        identifier_of(WITH_DAILY), "H", "2024-08-01", "2024-08-10"
+    ).to_dict()
+
+    assert body["error"] == ErrorCode.INVALID_ARGUMENTS
+    assert "elaborates no series" in body["message"]
+    assert "HIXM" in body["repair"]
+
+
+def test_each_elaborated_quantity_is_asked_for_by_its_own_name(tools):
+    from gagelink.hubeau import ELABORATED, quantity_for
+
+    assert quantity_for("daily discharge") == "QmnJ"
+    assert quantity_for("monthly mean discharge") == "QmM"
+    assert set(ELABORATED) == {"QmnJ", "QmM", "HIXM"}
+    assert quantity_for("HmnJ") is None  # reads like a daily level; the service has none
+
+
+def test_a_truncated_range_says_how_much_it_left(session):
+    """The service caps a page and hands back a link. Summarising the first page as though
+    it were the range is the failure this pins."""
+    held, served = 11323, 5000
+
+    def paged(url):
+        if "referentiel/stations" in url:
+            return 200, (FIXTURES / f"hubeau_station_{WITH_DAILY}.json").read_text()
+        rows = json.loads((FIXTURES / f"hubeau_daily_{WITH_DAILY}.json").read_text())["data"]
+        return 206, json.dumps({"count": held, "next": None, "data": rows[:served] or rows})
+
+    session.france = Hydrometry(fetch=paged)
+    body = Toolkit(session).get_series(
+        identifier_of(WITH_DAILY), "QmnJ", "1990-01-01", "2020-12-31"
+    ).to_dict()
+
+    assert body["ok"] is True
+    assert any("more values in this range than were fetched" in n for n in body["notes"])
+
+
+def test_a_manifest_records_the_status_the_service_sent(session):
+    """Not one the client worked out from the payload: a ledger holding a guess is worse
+    than one holding nothing."""
+    Toolkit(session).find_locations(country="FR", river="La Seine", limit=5)
+    search = [r for r in session.retrievals if r.collection == "hubeau-stations"][0]
+    assert search.status == 206  # the fixture was recorded as a partial page
+
+
+def test_a_country_the_package_does_not_search_is_named_as_such(tools):
+    body = tools.find_locations(country="DE", river="Rhein").to_dict()
+    assert body["error"] == ErrorCode.INVALID_ARGUMENTS
+    assert "no network is named" in body["message"]
