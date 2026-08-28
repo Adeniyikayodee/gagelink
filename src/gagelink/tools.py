@@ -345,8 +345,9 @@ class Toolkit:
         required, since an unfiltered search returns the national network.
 
         `country` chooses the agency, since a search has no identifier to read one from.
-        US is the USGS network; FR is Hub'Eau. The other filters carry the meaning each
-        agency gives them, which is stated on each argument rather than assumed to match.
+        US is the USGS network; FR is Hub'Eau; GB is the Environment Agency. The other
+        filters carry the meaning each agency gives them, which is stated on each argument
+        rather than assumed to match.
         """
         asked = country.strip().upper()
         if asked == "FR":
@@ -354,12 +355,14 @@ class Toolkit:
                 river=river, commune=county, department=hydrologic_unit_code,
                 region=state, bbox=bbox, limit=limit,
             )
+        if asked == "GB":
+            return self._find_uk(river=river, town=county, text=state, limit=limit)
         if asked != "US":
             return Result.failure(
                 ErrorCode.INVALID_ARGUMENTS,
                 f"no network is named {country!r}",
-                "country is US for the USGS network or FR for the French one. Those are "
-                "the two this package searches.",
+                "country is US for the USGS network, FR for the French one, or GB for the "
+                "Environment Agency. Those are the three this package searches.",
             )
         if river is not None:
             return Result.failure(
@@ -1353,6 +1356,67 @@ class Toolkit:
     # Internals ----------------------------------------------------------------------
 
     # France, through Hub'Eau -------------------------------------------------------------
+
+    def _find_uk(
+        self,
+        river: str | None,
+        town: str | None,
+        text: str | None,
+        limit: int,
+    ) -> Result:
+        """Search the Environment Agency network, which was unreachable without this.
+
+        Every other UK tool takes a station reference, and a reference is not something a
+        question arrives holding. Until this existed the coverage was real and usable only
+        by somebody who already had the answer to the first question they would ask.
+
+        The agency matches its filters in full: `riverName` wants `River Thames` and finds
+        nothing for `Thames`. That is why the free-text filter is here and why the repair
+        below names it, because the spelling a question uses is almost never the agency's.
+        """
+        if not any((river, town, text)):
+            return Result.failure(
+                ErrorCode.INVALID_ARGUMENTS,
+                "a search with no filter would return the whole Environment Agency network",
+                "For the UK, supply river as the watercourse name as the agency writes it, "
+                "as in River Thames; county as the town; or state as free text matched "
+                "against the station name, which is the filter to reach for when the "
+                "agency's spelling is not known.",
+            )
+
+        stations = self.session.gb_search(
+            river=river, town=town, text=text, limit=limit
+        )
+        if not stations:
+            return Result.failure(
+                ErrorCode.NO_DATA,
+                "no Environment Agency station matched those filters",
+                "River and town are matched in full and in the agency's own spelling: a "
+                "river is written River Thames rather than Thames. Try state as free text "
+                "against the station name instead, which matches on part of it.",
+            )
+
+        return Result(
+            ok=True,
+            data={
+                "locations": [
+                    {
+                        "id": station.id,
+                        "name": station.name,
+                        "river": station.river,
+                        "town": station.town,
+                        "catchment": station.catchment,
+                    }
+                    for station in stations
+                ],
+                "count": len(stations),
+            },
+        ).note(
+            "These are Environment Agency stations. The list carries no altitude, datum or "
+            "timezone: call describe_location for the frame a level here is measured from, "
+            "which is metres above either the station's own datum or Ordnance Datum and is "
+            "not the same thing."
+        )
 
     def _find_french(
         self,

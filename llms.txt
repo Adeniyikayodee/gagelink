@@ -40,6 +40,11 @@ find_locations, describe_location, get_latest, get_series, slice_series, get_pea
 get_forecast, get_model_forecast, get_satellite_passes, navigate_network, get_basin,
 lookup_parameter, export_manifest.
 
+find_locations takes country: US for USGS, FR for Hub'Eau, GB for the Environment Agency.
+The UK filters are river as the agency writes it (River Thames, not Thames), county as the
+town, and state as free text matched against the station name, which is the one to reach for
+when the agency's spelling is not known.
+
 ## What it will refuse, and why that is the point
 
 A gage height is measured from the station's own datum, not from sea level. Subtracting one

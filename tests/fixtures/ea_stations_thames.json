@@ -1,0 +1,154 @@
+{ 
+  "@context" : "http://environment.data.gov.uk/flood-monitoring/meta/context.jsonld" ,
+  "meta" : { 
+    "publisher" : "Environment Agency" ,
+    "licence" : "http://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/" ,
+    "documentation" : "http://environment.data.gov.uk/flood-monitoring/doc/reference" ,
+    "version" : "0.9" ,
+    "comment" : "Status: Beta service" ,
+    "hasFormat" : [ "http://environment.data.gov.uk/flood-monitoring/id/stations.csv?riverName=River+Thames&_limit=10", "http://environment.data.gov.uk/flood-monitoring/id/stations.rdf?riverName=River+Thames&_limit=10", "http://environment.data.gov.uk/flood-monitoring/id/stations.ttl?riverName=River+Thames&_limit=10", "http://environment.data.gov.uk/flood-monitoring/id/stations.html?riverName=River+Thames&_limit=10" ] ,
+    "limit" : 10
+  }
+   ,
+  "items" : [ { 
+    "@id" : "http://environment.data.gov.uk/flood-monitoring/id/stations/3400TH" ,
+    "RLOIid" : "7267" ,
+    "catchmentName" : "Thames from Hurley to Teddington" ,
+    "dateOpened" : "1983-01-01" ,
+    "easting" : 517700 ,
+    "label" : "Kingston" ,
+    "lat" : 51.415005 ,
+    "long" : -0.308869 ,
+    "measures" : [ { 
+      "@id" : "http://environment.data.gov.uk/flood-monitoring/id/measures/3400TH-flow--Mean-15_min-m3_s" ,
+      "parameter" : "flow" ,
+      "parameterName" : "Flow" ,
+      "period" : 900 ,
+      "qualifier" : "" ,
+      "unitName" : "m3/s"
+    }
+    , { 
+      "@id" : "http://environment.data.gov.uk/flood-monitoring/id/measures/3400TH-flow--i-15_min-m3_s" ,
+      "parameter" : "flow" ,
+      "parameterName" : "Flow" ,
+      "period" : 900 ,
+      "qualifier" : "" ,
+      "unitName" : "m3/s"
+    }
+    , { 
+      "@id" : "http://environment.data.gov.uk/flood-monitoring/id/measures/3400TH-flow-water-i-15_min-m3_s" ,
+      "parameter" : "flow" ,
+      "parameterName" : "Flow" ,
+      "period" : 900 ,
+      "qualifier" : "Water" ,
+      "unitName" : "m3/s"
+    }
+    , { 
+      "@id" : "http://environment.data.gov.uk/flood-monitoring/id/measures/3400TH-level-stage-i-15_min-mAOD" ,
+      "parameter" : "level" ,
+      "parameterName" : "Water Level" ,
+      "period" : 900 ,
+      "qualifier" : "Stage" ,
+      "unitName" : "mAOD"
+    }
+    , { 
+      "@id" : "http://environment.data.gov.uk/flood-monitoring/id/measures/3400TH-level-stage-i-15_min-mASD" ,
+      "parameter" : "level" ,
+      "parameterName" : "Water Level" ,
+      "period" : 900 ,
+      "qualifier" : "Stage" ,
+      "unitName" : "mASD"
+    }
+     ] ,
+    "northing" : 169800 ,
+    "notation" : "3400TH" ,
+    "riverName" : "River Thames" ,
+    "stageScale" : "http://environment.data.gov.uk/flood-monitoring/id/stations/3400TH/stageScale" ,
+    "stationReference" : "3400TH" ,
+    "status" : "http://environment.data.gov.uk/flood-monitoring/def/core/statusActive" ,
+    "town" : "Kingston Upon Thames" ,
+    "wiskiID" : "3400TH"
+  }
+  , { 
+    "@id" : "http://environment.data.gov.uk/flood-monitoring/id/stations/2607TH" ,
+    "RLOIid" : "7166" ,
+    "catchmentName" : "Thames from Hurley to Teddington" ,
+    "dateOpened" : "1997-01-01" ,
+    "downstageScale" : "http://environment.data.gov.uk/flood-monitoring/id/stations/2607TH/downstageScale" ,
+    "easting" : 490987 ,
+    "label" : "Bray Lock" ,
+    "lat" : 51.509305 ,
+    "long" : -0.69032 ,
+    "measures" : [ { 
+      "@id" : "http://environment.data.gov.uk/flood-monitoring/id/measures/2607TH-level-downstage-i-15_min----" ,
+      "parameter" : "level" ,
+      "parameterName" : "Water Level" ,
+      "period" : 900 ,
+      "qualifier" : "Downstream Stage" ,
+      "unitName" : "---"
+    }
+    , { 
+      "@id" : "http://environment.data.gov.uk/flood-monitoring/id/measures/2607TH-level-downstage-i-15_min-mASD" ,
+      "parameter" : "level" ,
+      "parameterName" : "Water Level" ,
+      "period" : 900 ,
+      "qualifier" : "Downstream Stage" ,
+      "unitName" : "mASD"
+    }
+    , { 
+      "@id" : "http://environment.data.gov.uk/flood-monitoring/id/measures/2607TH-level-stage-i-15_min-V" ,
+      "parameter" : "level" ,
+      "parameterName" : "Water Level" ,
+      "period" : 900 ,
+      "qualifier" : "Stage" ,
+      "unitName" : "V"
+    }
+    , { 
+      "@id" : "http://environment.data.gov.uk/flood-monitoring/id/measures/2607TH-level-stage-i-15_min-mASD" ,
+      "parameter" : "level" ,
+      "parameterName" : "Water Level" ,
+      "period" : 900 ,
+      "qualifier" : "Stage" ,
+      "unitName" : "mASD"
+    }
+     ] ,
+    "northing" : 179744 ,
+    "notation" : "2607TH" ,
+    "riverName" : "River Thames" ,
+    "stageScale" : "http://environment.data.gov.uk/flood-monitoring/id/stations/2607TH/stageScale" ,
+    "stationReference" : "2607TH" ,
+    "status" : "http://environment.data.gov.uk/flood-monitoring/def/core/statusActive" ,
+    "town" : "Bray" ,
+    "wiskiID" : "2607TH"
+  }
+  , { 
+    "@id" : "http://environment.data.gov.uk/flood-monitoring/id/stations/2902TH" ,
+    "RLOIid" : "7215" ,
+    "catchmentName" : "Thames from Hurley to Teddington" ,
+    "dateOpened" : "1985-01-01" ,
+    "downstageScale" : "http://environment.data.gov.uk/flood-monitoring/id/stations/2902TH/downstageScale" ,
+    "easting" : 505413 ,
+    "label" : "Chertsey Lock" ,
+    "lat" : 51.390617 ,
+    "long" : -0.48637 ,
+    "measures" : [ { 
+      "@id" : "http://environment.data.gov.uk/flood-monitoring/id/measures/2902TH-level-stage-i-15_min-mASD" ,
+      "parameter" : "level" ,
+      "parameterName" : "Water Level" ,
+      "period" : 900 ,
+      "qualifier" : "Stage" ,
+      "unitName" : "mASD"
+    }
+     ] ,
+    "northing" : 166818 ,
+    "notation" : "2902TH" ,
+    "riverName" : "River Thames" ,
+    "stageScale" : "http://environment.data.gov.uk/flood-monitoring/id/stations/2902TH/stageScale" ,
+    "stationReference" : "2902TH" ,
+    "status" : "http://environment.data.gov.uk/flood-monitoring/def/core/statusActive" ,
+    "town" : "Chertsey" ,
+    "wiskiID" : "2902TH"
+  }
+   ]
+}
+

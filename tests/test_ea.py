@@ -233,3 +233,112 @@ def test_a_level_without_an_offset_refuses_rather_than_guessing(tools):
     tools.describe_location(identifier_of(NO_OFFSET))
     with pytest.raises(DatumConversionUnavailable, match="no registered offset"):
         Q(2.187, "meter", datum="GAUGE:2604TH").to_datum("ODN")
+
+
+# The station search ---------------------------------------------------------------------------
+#
+# Left out of the first two UK releases on the argument that the pack offers no search and
+# writing one here would be writing a second client. The argument did not survive the
+# coverage: without a search every UK tool needs a station reference, and a reference is not
+# something a question arrives holding.
+
+THAMES = (FIXTURES / "ea_stations_thames.json").read_text()
+
+
+def searching(body=THAMES, status=200):
+    seen = []
+
+    def fetch(url: str) -> tuple[int, str]:
+        seen.append(url)
+        return status, body
+
+    fetch.seen = seen  # type: ignore[attr-defined]
+    return fetch
+
+
+def kit_searching(**kwargs):
+    fetch = searching(**kwargs)
+    return Session(agency=EnvironmentAgency(fetch=fetch)), fetch
+
+
+def test_a_river_search_returns_stations_a_question_can_use():
+    """Recorded live for River Thames. The identifiers come back in the EA- form every
+    other tool takes, which is the whole point of the search existing."""
+    with kit_searching()[0] as work:
+        result = Toolkit(work).find_locations(country="GB", river="River Thames").to_dict()
+
+    found = result["data"]["locations"]
+    assert result["data"]["count"] == len(found) == 3
+    assert {f["id"] for f in found} == {"EA-3400TH", "EA-2607TH", "EA-2902TH"}
+    assert all(f["river"] == "River Thames" for f in found)
+
+
+def test_the_search_says_what_the_listing_does_not_carry():
+    """A listing has no altitude, datum or timezone, and a UK level is metres above either
+    the station's own datum or Ordnance Datum. A search that let that pass unstated would
+    hand back identifiers and leave the hazard to be met later."""
+    with kit_searching()[0] as work:
+        result = Toolkit(work).find_locations(country="GB", river="River Thames").to_dict()
+    assert "Ordnance Datum" in " ".join(result["notes"])
+
+
+def test_a_search_with_no_filter_is_refused_rather_than_answered():
+    """The list is the whole network, and the first ten of it would read as a result."""
+    session, fetch = kit_searching()
+    with session as work:
+        result = Toolkit(work).find_locations(country="GB").to_dict()
+    assert fetch.seen == []
+    assert result["error"] == ErrorCode.INVALID_ARGUMENTS
+    assert "whole Environment Agency network" in result["message"]
+
+
+def test_the_repair_for_no_match_names_the_filter_that_matches_loosely():
+    """The agency matches a river name in full: `Thames` finds nothing and `River Thames`
+    finds three. A question almost never arrives in the agency's spelling, so the failure
+    has to point at the filter that does not need it."""
+    session, _ = kit_searching(body=json.dumps({"items": []}))
+    with session as work:
+        result = Toolkit(work).find_locations(country="GB", river="Thames").to_dict()
+    assert result["error"] == ErrorCode.NO_DATA
+    assert "River Thames rather than Thames" in result["repair"]
+
+
+def test_one_match_arrives_as_a_station_and_not_as_a_list_of_its_fields():
+    """The service answers a single match with an object rather than a list of one. Read
+    without that, a station's fields are taken for a list of stations."""
+    single = json.loads(THAMES)
+    single["items"] = single["items"][0]
+    session, _ = kit_searching(body=json.dumps(single))
+    with session as work:
+        result = Toolkit(work).find_locations(country="GB", river="River Thames").to_dict()
+    assert result["data"]["count"] == 1
+
+
+def test_a_search_is_recorded_in_the_manifest_like_any_other_retrieval():
+    with kit_searching()[0] as work:
+        Toolkit(work).find_locations(country="GB", river="River Thames")
+        assert [r["collection"] for r in work.manifest()["retrievals"]] == ["ea-stations"]
+
+
+def test_the_free_text_filter_reaches_the_service_as_search():
+    session, fetch = kit_searching()
+    with session as work:
+        Toolkit(work).find_locations(country="GB", state="Thames")
+    assert "search=Thames" in fetch.seen[0]
+
+
+def test_a_result_count_is_capped_so_a_wide_search_is_not_the_network():
+    from gagelink.ea import MAX_RESULTS
+
+    session, fetch = kit_searching()
+    with session as work:
+        # The town reaches the agency through county, which is the argument the tool has.
+        Toolkit(work).find_locations(country="GB", county="Oxford", limit=5000)
+    assert f"_limit={MAX_RESULTS}" in fetch.seen[0]
+
+
+def test_a_country_this_package_does_not_search_names_the_three_it_does():
+    with kit_searching()[0] as work:
+        result = Toolkit(work).find_locations(country="DE", river="Rhein").to_dict()
+    assert result["error"] == ErrorCode.INVALID_ARGUMENTS
+    assert "GB" in result["repair"]

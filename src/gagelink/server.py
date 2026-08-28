@@ -73,7 +73,7 @@ INSTRUCTIONS = """Hydrology data for rivers, gages, forecasts, and basins, from 
 
 Identifiers are of the form USGS-01646500, with the agency prefix and the leading zero. Use find_locations to search by state, county, or bounding box if you have a place name rather than a number.
 
-UK stations are EA-2604TH, using the Environment Agency's own reference. They answer describe_location and get_latest only: that service publishes no series, peaks, forecast, network, or basin, and no record grade at all. There is no search for them, so a UK question needs the reference.
+UK stations are EA-2604TH, the Environment Agency's own reference. They answer describe_location and get_latest only: that service publishes no series, peaks, forecast, network, basin, or record grade. Find them with find_locations and country=GB, by river (River Thames), town, or station name.
 
 French stations are FR-F700000102, from Hub'Eau. Find them with find_locations and country=FR, by river as La Seine or Le Rhone. They answer describe_location, get_latest, and get_series only. Hub'Eau publishes no unit on any value: a level is millimetres above the station's own zero, a discharge is litres per second, and both are labelled here. Everything else is the United States.
 
@@ -100,7 +100,8 @@ TOOLS: list[dict[str, Any]] = [
             "Search monitoring locations by state, county, hydrologic unit, site type, "
             "or bounding box. At least one filter is required. Returns identifiers of the "
             "form USGS-01646500, which every other tool takes. Pass country=FR to search "
-            "the French network instead, by river name, commune, department, or bbox."
+            "the French network by river name, commune, department, or bbox, or country=GB "
+            "for the Environment Agency by river, town, or station name."
         ),
         "inputSchema": {
             "type": "object",
@@ -116,20 +117,25 @@ TOOLS: list[dict[str, Any]] = [
                 "limit": {"type": "integer", "default": 10},
                 "country": {
                     "type": "string",
-                    "enum": ["US", "FR"],
+                    "enum": ["US", "FR", "GB"],
                     "default": "US",
                     "description": (
                         "Which network to search, since a search has no identifier to "
                         "read an agency from. US is USGS; FR is the French Hub'Eau "
                         "network, where state is the region, county the commune, and "
-                        "hydrologic_unit_code the department number."
+                        "hydrologic_unit_code the department number; GB is the "
+                        "Environment Agency, where river is the watercourse as the agency "
+                        "writes it (River Thames, not Thames), county is the town, and "
+                        "state is free text matched against the station name, which is "
+                        "the one to use when the agency's spelling is not known."
                     ),
                 },
                 "river": {
                     "type": "string",
                     "description": (
-                        "Watercourse name, written with its article as the agency writes "
-                        "it: La Seine, Le Rhone. France only; the USGS collection has no "
+                        "Watercourse name, as the agency writes it: La Seine or Le Rhone "
+                        "with the article in France, River Thames with the word river in "
+                        "the UK. France and the UK only; the USGS collection has no "
                         "river-name filter."
                     ),
                 },

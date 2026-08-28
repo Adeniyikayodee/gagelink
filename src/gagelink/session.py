@@ -313,6 +313,21 @@ class Session:
         self.conversions[key] = conversion
         return conversion
 
+    def gb_search(
+        self,
+        river: str | None = None,
+        town: str | None = None,
+        text: str | None = None,
+        limit: int = 10,
+    ) -> list[ea.StationSummary]:
+        """Environment Agency stations matching a river, a town, or a name."""
+        found, retrievals = self.agency.search(
+            river=river, town=town, text=text, limit=limit
+        )
+        for retrieval in retrievals:
+            self._keep(retrieval)
+        return found
+
     def basin(self, identifier: str) -> Basin | None:
         """The area draining to a point, delineated once per session."""
         if identifier in self.basins:

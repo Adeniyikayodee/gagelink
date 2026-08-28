@@ -306,9 +306,27 @@ The client is `quantity_guard.packs.ea`. Levels are `mASD`, metres above the sta
 or `mAOD`, metres above Ordnance Datum — gage datum against NAVD88 in another vocabulary. A
 level converts onto ODN where the station publishes an offset; 19 of 156 do.
 
-Two tools only. No search, so you need the reference:
-https://environment.data.gov.uk/flood-monitoring/id/stations. No record grade either — the
-live service publishes none, so age is the only staleness signal.
+Two tools only, and no record grade — the live service publishes none, so age is the only
+staleness signal.
+
+There is a search now, which there was not before:
+
+```
+find_locations country=GB river="River Thames"   ->  EA-3400TH Kingston, EA-2607TH Bray Lock, ...
+find_locations country=GB county="Oxford"        ->  by town
+find_locations country=GB state="Thames"         ->  free text over the station name
+```
+
+Worth knowing which of those three to reach for. The agency matches `riverName` and `town`
+in full and in its own spelling: `River Thames` returns three stations and `Thames` returns
+none. Free text matches the station label instead, so it is the one to use when you do not
+already know how the agency writes the name — which is most of the time, and is why the
+no-match failure points at it.
+
+The listing carries a name, a river and a town, and no altitude, datum or timezone. That is
+deliberate: a search says which stations exist, and `describe_location` says what one is
+measured from. Building the full location type out of a listing would mean a station whose
+datum was invented by the constructor.
 
 Elsewhere: SWOT elevations are global; ERA5, GRACE and HydroBASINS are global but
 library-only. CAMELS is the US variant.
