@@ -84,8 +84,18 @@ def test_every_tool_is_named_in_the_summary_an_agent_reads_first():
 
 
 def test_the_readme_leads_with_what_it_answers():
-    """An agent, or a person choosing tools for one, decides in the first screen."""
+    """An agent, or a person choosing tools for one, decides in the first screen.
+
+    What has to be there is the two things that decide it: the questions this answers, and
+    that it refuses a comparison rather than guessing at one. The copy-paste configuration
+    is checked for separately and is allowed to sit further down, since somebody who has
+    decided will scroll and somebody who has not will not.
+    """
     head = README[:2200]
-    assert "Questions it answers" in head
-    assert "mcpServers" in head
-    assert "What it refuses" in head
+    assert "What can it answer?" in head
+    assert "refuses" in head
+
+
+def test_the_readme_carries_a_configuration_that_can_be_pasted():
+    """The no-install path. Without it the first step is working out what to install."""
+    assert "mcpServers" in README
