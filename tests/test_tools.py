@@ -150,6 +150,44 @@ def test_a_station_without_a_publishable_offset_says_that_instead():
     assert "cannot be converted" in notes
 
 
+def test_the_offset_carries_how_well_it_is_known(kit):
+    """The offset is the term a freeboard turns on, and it has an accuracy of its own. A
+    stage read to a hundredth against an offset good to fifteen feet gives an answer whose
+    printed precision is three orders out from its accuracy."""
+    data = kit.describe_location("USGS-07374000").to_dict()["data"]
+    assert data["altitude_accuracy"] == {"value": 0.01, "unit": "ft"}
+    assert data["altitude_method"] == "Level or other surveyed method."
+
+
+def test_an_offset_nobody_surveyed_says_so_and_says_what_it_bounds():
+    """Across 3,397 gaged stream stations sampled in four states, 72% publish an offset
+    known no better than a foot and a third were interpolated from a topographic map. The
+    commonest published accuracy is fifteen feet."""
+    with Session(service=Service(fetch=serving(monitoring_locations=BOULDER))) as work:
+        result = Toolkit(work).describe_location("USGS-06730500").to_dict()
+    notes = " ".join(result["notes"])
+
+    assert result["data"]["altitude_accuracy"] == {"value": 10.0, "unit": "ft"}
+    assert "cannot be tighter than 10 ft" in notes
+    assert "not surveyed at the gage" in notes
+
+
+def test_an_offset_finer_than_a_stage_is_not_reported_as_the_limiting_term(kit):
+    """Saying an offset bounds the answer when it does not would teach a model to discount
+    every freeboard, which is the opposite of the point."""
+    notes = " ".join(kit.describe_location("USGS-07374000").to_dict()["notes"])
+    assert "not the limiting term" in notes
+
+
+def test_an_offset_with_no_published_accuracy_is_not_read_as_an_exact_one():
+    unstated = json.loads(json.dumps(LOCATION))
+    unstated["features"][0]["properties"]["altitude_accuracy"] = None
+    with Session(service=Service(fetch=serving(monitoring_locations=unstated))) as work:
+        result = Toolkit(work).describe_location("USGS-07374000").to_dict()
+    assert result["data"].get("altitude_accuracy") is None
+    assert "no accuracy for that offset" in " ".join(result["notes"])
+
+
 def test_drainage_area_says_the_unit_the_service_omits(kit):
     notes = " ".join(kit.describe_location("USGS-07374000").to_dict()["notes"])
     assert "square miles" in notes

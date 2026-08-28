@@ -19,6 +19,7 @@ grade beside it.
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -63,6 +64,20 @@ class ErrorCode:
             for name, value in vars(cls).items()
             if name.isupper() and isinstance(value, str)
         )
+
+
+def significant(value: float, digits: int = 4) -> float:
+    """Round to a precision the value actually has.
+
+    Two places need this and both are arithmetic that manufactures figures its inputs did
+    not have: a basin area computed from a generalised polygon, and an uncertainty
+    combined from two others. Reporting either to twelve significant figures asserts a
+    precision nothing behind it supports, and invites the number being quoted against a
+    surveyed one as though the two were comparable.
+    """
+    if value == 0:
+        return 0.0
+    return round(value, -int(math.floor(math.log10(abs(value)))) + (digits - 1))
 
 
 def unit_text(units: Any) -> str:

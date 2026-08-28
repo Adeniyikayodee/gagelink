@@ -30,6 +30,14 @@ from .normalise import Location, Reading, location_from
 from .nldi import Basin, Network, NetworkSite
 from .nwps import Forecasts, Gauge, ModelSeries
 from .swot import Pass, Satellite
+from .vdatum import (
+    TARGET,
+    Conversion,
+    ConversionRefused,
+    NoCoverage,
+    VerticalDatums,
+    unreachable,
+)
 from quantity_guard import Q
 
 from .service import Retrieval, Service
@@ -53,6 +61,7 @@ class Session:
         satellite: Satellite | None = None,
         agency: EnvironmentAgency | None = None,
         france: Hydrometry | None = None,
+        vertical: VerticalDatums | None = None,
         api_key: str | None = None,
         question: str = "",
     ) -> None:
@@ -62,6 +71,7 @@ class Session:
         self.satellite = satellite if satellite is not None else Satellite()
         self.agency = agency if agency is not None else EnvironmentAgency()
         self.france = france if france is not None else Hydrometry()
+        self.vertical = vertical if vertical is not None else VerticalDatums()
         self.question = question
         self.started_at = datetime.now(timezone.utc)
         self.retrievals: list[Retrieval] = []
@@ -73,6 +83,10 @@ class Session:
         self.basins: dict[str, Basin] = {}
         self.model: dict[tuple[str, str], ModelSeries | None] = {}
         self.passes: dict[tuple[str, str, str], list[Pass]] = {}
+        #: Conversions already asked for, by position, height and pair of datums. A
+        #: conversion is a pure function of those four, so asking twice in one session
+        #: spends a request to learn what is already held.
+        self.conversions: dict[tuple[float, float, float, str, str, str], Conversion] = {}
         self.ledger: Any | None = None
         self._stack: ExitStack | None = None
 
@@ -243,6 +257,61 @@ class Session:
         )
         self._keep(retrieval)
         return sites
+
+    def on_datum(self, station: Location, target: str = TARGET) -> Conversion:
+        """The station's gage-datum altitude expressed on another national datum.
+
+        Raises rather than returning None where the conversion cannot be made, because
+        every reason it cannot is a different thing to tell the caller: no altitude to
+        convert, a point the service does not cover, a datum with no known pairing, or the
+        service declining. A single None would flatten four repairs into one.
+        """
+        if station.altitude is None or not station.vertical_datum:
+            raise ConversionRefused(
+                f"{station.id} publishes no altitude on a named vertical datum, so there "
+                f"is nothing to convert onto {target}"
+            )
+        if station.latitude is None or station.longitude is None:
+            raise ConversionRefused(
+                f"{station.id} publishes no position, and a vertical datum conversion "
+                f"depends on where it is asked"
+            )
+        if unreachable(station.state):
+            # Known from the station record, so it is answered from it. Spending a request
+            # to be told what the state name already says is a request not spent on the
+            # question, and the allowance is fifty an hour without a key.
+            raise NoCoverage(
+                f"the datum service's geoid model does not cover {station.state}, so no "
+                f"conversion onto {target} can be made for {station.id}"
+            )
+
+        return self.converted(
+            station.latitude, station.longitude, station.altitude, target
+        )
+
+    def converted(
+        self, latitude: float, longitude: float, elevation: Q, target: str = TARGET
+    ) -> Conversion:
+        """One elevation moved onto another datum, asked for at most once per session.
+
+        Held by position, height, unit and pair of datums, since a conversion is a pure
+        function of those and asking twice spends a request to learn what is already known.
+        """
+        key = (
+            round(latitude, 6),
+            round(longitude, 6),
+            elevation.magnitude,
+            str(elevation.units),
+            elevation.datum or "",
+            target,
+        )
+        if key in self.conversions:
+            return self.conversions[key]
+
+        conversion, retrieval = self.vertical.convert(latitude, longitude, elevation, target)
+        self._keep(retrieval)
+        self.conversions[key] = conversion
+        return conversion
 
     def basin(self, identifier: str) -> Basin | None:
         """The area draining to a point, delineated once per session."""

@@ -47,12 +47,23 @@ from a surveyed elevation gives a number that looks like a freeboard and is wron
 feet, in the direction of calling a levee safe. This package refuses that subtraction rather
 than answering it, and describe_location returns the offset that makes it well defined.
 
+That offset has an accuracy of its own, worse than a foot at 72% of gaged stations, and it
+is returned too: a freeboard cannot be tighter than it. 58% of stations publish the offset
+on NGVD29 while modern surveys are on NAVD88, so describe_location takes on_datum=NAVD88 and
+converts it through NOAA's VDatum, with the uncertainty of the conversion.
+
+on_datum also takes the tidal datums (MLLW, MLW, LMSL, MTL, DTL, MHW, MHHW), for a question
+about the level relative to the tide rather than to the land, and get_satellite_passes takes
+it too, to move SWOT elevations off the EGM2008 geoid they are measured against. Both are
+contiguous United States only, and both are refused rather than approximated elsewhere.
+
 The same applies to satellite elevations, which are on a geoid, and to modelled flows, which
 may have no measurement behind them at all.
 
 ## Sources
 
 USGS Water Data APIs, NOAA National Water Prediction Service, NOAA National Water Model,
+NOAA VDatum,
 USGS Hydro Network-Linked Data Index, SWOT via NASA Hydrocron, ERA5 via the Copernicus
 Climate Data Store, GRACE via NASA Earthdata, and local copies of CAMELS and HydroSHEDS.
 

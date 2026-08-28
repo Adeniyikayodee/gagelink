@@ -38,6 +38,7 @@ from .results import DEFAULT_BUDGET_TOKENS, ErrorCode, Result
 from .schema import validate
 from .session import Session
 from .tools import RAISE_INTERNAL, Toolkit
+from .vdatum import TARGET, tidal_datums
 
 #: How this server names itself, in the one shape both revisions want it in. The modern
 #: revision puts it in a result's `_meta` and the handshake revisions put it in the
@@ -47,6 +48,13 @@ SERVER_INFO: dict[str, Any] = {
     "title": "Hydrology data: rivers, gages, forecasts, basins",
     "version": __version__,
 }
+
+#: What a caller may ask an elevation to be converted onto, in the order they are worth
+#: offering: the modern national datum first, since that is what a survey is on and what
+#: the majority of stations are not on, then the tidal datums for a question about the
+#: level relative to the tide. Built from the converter's own table rather than typed out
+#: again, so a datum cannot be offered to a model that the module would then refuse.
+CONVERTIBLE_DATUMS: list[str] = [TARGET, *tidal_datums()]
 
 #: How long a client may hold the discovery answer. Nothing in it changes while the process
 #: runs: the tool list is built at import and the version list is a constant. An hour is
@@ -71,17 +79,17 @@ French stations are FR-F700000102, from Hub'Eau. Find them with find_locations a
 
 Four things decide whether an answer is right.
 
-A river level is not an elevation. Gage height is measured from the station's own datum, whose zero sits at some height on a national datum, and the two are both lengths in feet. Subtracting a stage from a surveyed elevation without adding that offset gives a number that looks like a freeboard and is wrong by tens of feet, in the direction of calling a levee safe. Call describe_location before any such comparison; it returns the offset. Flood thresholds from get_forecast are already on the gage datum and need no shift.
+A river level is not an elevation. Gage height is measured from the station's own datum, whose zero sits at some height on a national datum, and the two are both lengths in feet. Subtracting a stage from a surveyed elevation without adding that offset gives a number that looks like a freeboard and is wrong by tens of feet, in the direction of calling a levee safe. Call describe_location before any such comparison; it returns the offset and how well that offset is known, which is worse than a foot at most stations and bounds any freeboard computed through it. Flood thresholds from get_forecast are already on the gage datum and need no shift.
 
 Latest is not current. Each parameter returns the last value held for it, independently, so one response can carry a discharge from this morning beside a turbidity from years ago. Pass max_age_hours, and read the age on every reading you quote.
 
-Modelled is not measured. get_model_forecast returns National Water Model output, which covers reaches with no gage on them, so a value from it may have nothing observed behind it. get_satellite_passes returns elevations on a geoid, which cannot be compared to a stage or a survey at all.
+Modelled is not measured. get_model_forecast returns National Water Model output, which covers reaches with no gage, so a value from it may have nothing measured behind it. get_satellite_passes returns elevations on a geoid; pass on_datum to move them onto a national datum, in the US only.
 
 Units are not interchangeable across these services. Discharge appears as cfs, kcfs, ft^3/s, and ft^3/s with a superscript, and every value comes back labelled with its unit, datum, and record quality. Use those labels; do not assume a unit from a magnitude.
 
 Every value carries whether the record is provisional or approved. Say which when it matters. Never supply a number from memory: if a tool cannot provide it, report it as unavailable, and call export_manifest at the end when the answer needs to be reproducible.
 
-Without an API key the service allows 50 requests an hour, and each result tells you how many remain."""
+Without a key the allowance is 50 requests an hour; each result says how many remain."""
 
 #: Kept short deliberately. A model degrades as its tool list grows, and eleven tools
 #: covering three services is the whole of what phase one offers.
@@ -132,14 +140,34 @@ TOOLS: list[dict[str, Any]] = [
         "name": "describe_location",
         "description": (
             "Metadata for one monitoring location: its name, position, drainage area, "
-            "timezone, and the vertical datum its stage readings are measured from. Call "
-            "this before comparing any stage against an elevation, because the answer "
-            "depends on the offset it returns. Takes a USGS identifier, an Environment "
-            "Agency one as in EA-2604TH, or a Hub'Eau one as in FR-F700000102."
+            "timezone, the vertical datum its stage readings are measured from, and how "
+            "well that offset is known. Call this before comparing any stage against an "
+            "elevation, because the answer depends on the offset it returns. Most US "
+            "stations publish their offset on NGVD29 while modern surveys are on NAVD88; "
+            "pass on_datum to have the offset converted before you difference anything. "
+            "Takes a USGS identifier, an Environment Agency one as in EA-2604TH, or a "
+            "Hub'Eau one as in FR-F700000102."
         ),
         "inputSchema": {
             "type": "object",
-            "properties": {"identifier": {"type": "string"}},
+            "properties": {
+                "identifier": {"type": "string"},
+                "on_datum": {
+                    "type": "string",
+                    "enum": CONVERTIBLE_DATUMS,
+                    "description": (
+                        "Also return the station's offset expressed on this datum, with "
+                        "the uncertainty of the conversion. NAVD88 is what a modern survey "
+                        "or lidar product is on, and most stations publish their offset on "
+                        "NGVD29 instead, so this is the majority case rather than an edge "
+                        "one. The rest are tidal datums, for a question about the level "
+                        "relative to the tide rather than to the land; they exist only "
+                        "where the tide reaches. Contiguous states only, and it costs one "
+                        "extra request to NOAA's datum service, so it is not done unless "
+                        "asked for."
+                    ),
+                },
+            },
             "required": ["identifier"],
         },
     },
@@ -284,6 +312,19 @@ TOOLS: list[dict[str, Any]] = [
                 "feature_id": {"type": "string", "description": "SWORD reach id"},
                 "start": {"type": "string", "description": "ISO date"},
                 "end": {"type": "string", "description": "ISO date"},
+                "on_datum": {
+                    "type": "string",
+                    "enum": CONVERTIBLE_DATUMS,
+                    "description": (
+                        "Also return each elevation moved onto this datum. Satellite "
+                        "elevations are on the EGM2008 geoid and can be differenced "
+                        "against nothing until they are moved off it. One conversion is "
+                        "taken for the reach and applied to every pass, since the "
+                        "separation depends on position and not on height. Only reaches "
+                        "in the contiguous United States can be converted; SWOT observes "
+                        "the whole world and this datum service covers one country."
+                    ),
+                },
             },
             "required": ["feature_id", "start", "end"],
         },
@@ -516,6 +557,42 @@ RETURNS: dict[str, dict[str, Any]] = {
         "longitude": {"type": "number", "description": "Decimal degrees, WGS84"},
         "drainage_area": Q_REF,
         "altitude_of_gage_datum": Q_REF,
+        "altitude_accuracy": {
+            **Q_REF,
+            "description": (
+                "How well the offset above is known, as the service publishes it. A "
+                "freeboard cannot be tighter than this however precisely the stage was "
+                "read. Most stations publish something worse than a foot."
+            ),
+        },
+        "altitude_method": {
+            "type": "string",
+            "description": (
+                "How the offset was arrived at. A third of stations interpolate it from a "
+                "topographic map and a fifth record no method, which is not the same "
+                "claim as the gage datum having been surveyed."
+            ),
+        },
+        "altitude_on_requested_datum": {
+            **Q_REF,
+            "description": (
+                "Present only when on_datum was passed and the conversion succeeded. The "
+                "same offset on the datum asked for, which is what makes a difference "
+                "against an elevation on that datum well defined."
+            ),
+        },
+        "conversion_uncertainty": {
+            **Q_REF,
+            "description": "How well NOAA's datum service knows that conversion.",
+        },
+        "offset_uncertainty": {
+            **Q_REF,
+            "description": (
+                "The station's published accuracy and the conversion's uncertainty added "
+                "in quadrature. This is the bound on any freeboard computed through the "
+                "converted offset."
+            ),
+        },
         "gage_datum": {
             "type": "string",
             "description": (
@@ -581,6 +658,15 @@ RETURNS: dict[str, dict[str, Any]] = {
             "description": (
                 "EGM2008, a geoid. Not a national datum and not a gage datum, so an "
                 "elevation here cannot be differenced against a stage or a survey."
+            ),
+        },
+        "datum_separation": {
+            **Q_REF,
+            "description": (
+                "Present only when on_datum was passed and the conversion succeeded. How "
+                "far the requested datum sits from the geoid at this reach. One value for "
+                "the reach: the separation is a property of the position, not of the "
+                "height above it."
             ),
         },
         "passes": {"type": "integer"},

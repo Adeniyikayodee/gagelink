@@ -111,6 +111,12 @@ class Pass:
     width: Q | None = None
     slope: Q | None = None
     quality: str | None = None
+    #: A point on the reach, being the middle vertex of its centreline. A reach is about
+    #: ten kilometres of river, so this is a position for the reach rather than for the
+    #: measurement, which is what a datum conversion needs and all it needs: the separation
+    #: between two vertical surfaces changes by centimetres over that distance.
+    longitude: float | None = None
+    latitude: float | None = None
 
     @property
     def is_usable(self) -> bool:
@@ -122,7 +128,25 @@ class Pass:
         return self.elevation is not None
 
 
-def pass_from(properties: Mapping[str, Any]) -> Pass:
+def midpoint(geometry: Mapping[str, Any] | None) -> tuple[float | None, float | None]:
+    """A representative point on a reach, from its centreline.
+
+    The middle vertex rather than a computed centroid: a centroid of a curved line can fall
+    off the river, and nothing here needs a point more exact than one that is on it.
+    """
+    coordinates = (geometry or {}).get("coordinates") or []
+    if geometry and geometry.get("type") == "Point" and len(coordinates) >= 2:
+        return float(coordinates[0]), float(coordinates[1])
+    points = [c for c in coordinates if isinstance(c, (list, tuple)) and len(c) >= 2]
+    if not points:
+        return None, None
+    chosen = points[len(points) // 2]
+    return float(chosen[0]), float(chosen[1])
+
+
+def pass_from(
+    properties: Mapping[str, Any], geometry: Mapping[str, Any] | None = None
+) -> Pass:
     """Build one pass from a Hydrocron feature's properties.
 
     Each value carries its unit in a sibling field, so nothing is read in an assumed unit.
@@ -136,6 +160,7 @@ def pass_from(properties: Mapping[str, Any]) -> Pass:
             return None
         return Q(value, parse_unit(unit), datum=datum, quality=grade)
 
+    longitude, latitude = midpoint(geometry)
     moment = properties.get("time_str")
     return Pass(
         feature_id=str(properties.get("reach_id") or properties.get("node_id") or ""),
@@ -151,6 +176,8 @@ def pass_from(properties: Mapping[str, Any]) -> Pass:
         width=quantity("width"),
         slope=quantity("slope"),
         quality=grade,
+        longitude=longitude,
+        latitude=latitude,
     )
 
 
@@ -229,5 +256,5 @@ def _passes(payload: Mapping[str, Any]) -> list[Pass]:
     """Every pass in a response, in the order the mission observed them."""
     results = payload.get("results") or {}
     features = (results.get("geojson") or {}).get("features") or []
-    found = [pass_from(f.get("properties") or {}) for f in features]
+    found = [pass_from(f.get("properties") or {}, f.get("geometry")) for f in features]
     return sorted(found, key=lambda p: p.observed_at or datetime.min.replace(tzinfo=None))

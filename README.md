@@ -53,8 +53,10 @@ of feet, in the direction of calling a levee safe. Both figures are lengths in f
 nothing dimensional separates them and no units library catches it.
 
 This package refuses that subtraction rather than answering it, and `describe_location`
-returns the offset that makes it well defined. The same applies to satellite elevations,
-which are on a geoid, and to modelled flows, which may have no measurement behind them.
+returns the offset that makes it well defined, how well that offset is itself known, and,
+where the two numbers are on different national datums, the conversion between them from
+NOAA's VDatum. The same applies to satellite elevations, which are on a geoid and can be
+moved off it the same way, and to modelled flows, which may have no measurement behind them.
 
 ## Why
 
@@ -115,8 +117,21 @@ readings["00065"].value.to_datum("NAVD88")   # DatumConversionUnavailable
 
 That last line is the point. Boulder Creek publishes its altitude on NGVD29, so a stage
 there resolves onto NGVD29 and refuses NAVD88, since the offset between the two varies with
-location and is not published here. Assuming the modern datum because it is the modern datum
-is a freeboard error one step earlier than the one anybody looks for.
+location and the USGS payload does not carry it. Assuming the modern datum because it is the
+modern datum is a freeboard error one step earlier than the one anybody looks for.
+
+The offset does exist, though — it is just published by somebody else. Ask for it and the
+refusal becomes an answer:
+
+```python
+with Session() as work:
+    Toolkit(work).describe_location("USGS-06730500", on_datum="NAVD88")
+
+readings["00065"].value.to_datum("NAVD88")   # Q(4872.17 ft (NAVD88, provisional))
+```
+
+Which is the shape of the whole package: refuse until the frame is established, then
+convert. Not the other way round.
 
 ### What is not published, and what is done about it
 
@@ -320,6 +335,105 @@ A stage and a surveyed elevation are both lengths in feet, and subtracting one f
 other returns a number that looks like a freeboard. The error is silent, it runs in the
 direction of reporting a levee as safe, and no units library prevents it because nothing
 about the units is wrong.
+
+### How well the offset is known
+
+Little Falls is the easy case: its offset was determined by survey-grade GNSS and is
+published as accurate to 0.17 ft, so the freeboard above is limited by the stage rather
+than by the offset. Most stations are not that case.
+
+Across 7,361 USGS stream stations sampled in Colorado, Louisiana, Maryland and Washington,
+46% publish an altitude for their gage datum at all. Of those:
+
+| | |
+|---|---|
+| Offset known no better than a foot | 72% |
+| Commonest published accuracy | 15 ft, then 10 ft |
+| Levelled to a hundredth of a foot | about 1 in 20 |
+| Interpolated from a topographic map | 33% |
+| Method recorded as unknown | 22% |
+
+So the offset a freeboard turns on is usually the loosest term in it. `describe_location`
+returns `altitude_accuracy` and `altitude_method` beside the offset, and says what the pair
+bound. A stage read to a hundredth against an offset good to fifteen feet is not a freeboard
+to a hundredth, and nothing else in the payload says so.
+
+### Offsets on the wrong datum, and what to do about it
+
+Of the stations that publish an altitude, **58% publish it on NGVD29** and 42% on NAVD88. A
+modern survey or lidar product is on NAVD88. So for the majority of stations the offset and
+the elevation being compared against it are on different datums, and across the contiguous
+states that difference runs to feet.
+
+Pass `on_datum="NAVD88"` to `describe_location` and the offset is converted through NOAA's
+VDatum, with the uncertainty of the conversion returned beside it:
+
+```
+altitude_of_gage_datum        4860 ft (NGVD29)      # Boulder Creek at mouth, CO
+altitude_accuracy             10 ft, interpolated from a topographic map
+altitude_on_requested_datum   4863.061 ft (NAVD88)
+conversion_uncertainty        0.17 ft
+offset_uncertainty            10 ft                 # the two, in quadrature
+```
+
+Three feet of datum shift, and an offset whose own accuracy is sixty times the uncertainty
+of the conversion that moved it. Both numbers are needed and the larger one decides.
+
+The conversion costs one request to a second service, so it is not made unless asked for,
+and it is refused rather than approximated wherever it cannot be made: outside VDatum's
+coverage the service answers HTTP 200 with a `t_z` of -999999, which is a fill value dressed
+as an elevation and does not leave `vdatum.py`.
+
+### Tidal datums
+
+`on_datum` also takes the tidal datums: `MLLW`, `MLW`, `LMSL`, `MTL`, `DTL`, `MHW`, `MHHW`.
+They answer a different question from the orthometric ones. Not how high above the land, but
+how high relative to the tide, which is the frame coastal flood work is stated in and which
+no gage publishes.
+
+Two things are worth knowing before quoting one. A tidal datum is the average of a tidal
+extreme over a nineteen-year epoch rather than a fixed surface, so it exists only where the
+tide reaches: a station above the head of tide has no conversion onto it however close to
+the coast it looks, and the refusal for that is the same `-999999` as for anywhere else.
+
+And the transformation is often less certain than the shift it makes. At Baton Rouge:
+
+```
+altitude_of_gage_datum        0 ft (NAVD88)         # levelled, ±0.01 ft
+altitude_on_requested_datum   0.354 ft (MLLW)
+conversion_uncertainty        0.529 ft
+offset_uncertainty            0.5291 ft
+```
+
+The shift is 0.354 ft and is known to ±0.529. It is still the right correction and still
+worth making; it is not a figure to quote to the inch. Note that the dominant term has
+swapped from the Boulder Creek case above — there the station's own accuracy decided it, here
+the conversion does. Which is why both are returned rather than one.
+
+### The geoid SWOT measures against
+
+SWOT's water surface elevations are on the EGM2008 geoid, which is neither a national datum
+nor a gage datum, so until now they could be differenced against nothing at all. Pass
+`on_datum` to `get_satellite_passes` and the reach is moved off it.
+
+One conversion serves every pass. The separation between two vertical surfaces is a property
+of the position and not of the height above it — checked against the service at 10, 20 and
+400 m, identical to four decimal places — so a reach costs one request rather than one per
+overpass, and the result is exact for the reach rather than an average over it.
+
+The usual outcome is a refusal, and it should be. SWOT observes every river on the planet
+and VDatum covers one country; the recorded test fixture is a reach in Brazil for that
+reason. Where the two do not overlap the comparison stays refused, and the note says which
+of the two services is the reason.
+
+Two guards apply here that do not apply elsewhere. Geoid conversions publish their
+uncertainty as the string `NaN`, which parses as a float, defeats a magnitude test because
+every comparison against it is false, and would turn a total into `NaN` if added in
+quadrature; it is rejected on finiteness and reported as unstated rather than as zero. And a
+separation larger than any two of these datums could really be — ten metres — is discarded
+rather than applied, because a conversion answered for one position and applied to another
+produces a shift of hundreds of metres in the right unit, carrying the right datum, that
+nothing downstream can catch.
 
 ## Forecasts
 

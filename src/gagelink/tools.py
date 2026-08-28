@@ -20,9 +20,9 @@ from datetime import datetime, timedelta, timezone
 from functools import wraps
 from typing import Any, Callable, Iterable
 
-from quantity_guard import Q
+from quantity_guard import Q, datums
 
-from . import ea, hubeau
+from . import ea, hubeau, vdatum
 from .normalise import STATISTICS, Location, Reading, readings_from
 from .results import DEFAULT_BUDGET_TOKENS, ErrorCode, Result, unit_text
 from .nldi import DIRECTIONS, NotOnTheNetwork
@@ -209,6 +209,61 @@ def _fr_refusal(tool: str, identifier: str) -> Result:
     )
 
 
+#: Where an offset stops being able to settle the question it is usually asked for. A
+#: freeboard is argued over in inches, so an offset known only to the foot cannot decide
+#: one however precisely the stage beside it was read.
+COARSE_OFFSET_FEET = 1.0
+
+#: Methods that put a number on the gage datum without anybody having measured it there.
+#: Kept as fragments because the service writes the same method several ways, with and
+#: without a trailing stop.
+_INTERPOLATED = ("interpolated", "unknown", "altimeter", "reported method")
+
+
+def _offset_confidence(station: Location) -> str:
+    """What the offset is worth, which is not the same as what it says.
+
+    The offset is the term a freeboard turns on, and the service publishes both how well
+    it is known and how it was arrived at. Across 3,397 gaged stream stations sampled in
+    four states, 72% are known no better than a foot, the commonest published accuracy is
+    fifteen feet, a third were interpolated from a topographic map, and a fifth record no
+    method at all. Only about one in twenty is levelled to a hundredth.
+
+    Returning the offset without those two fields invites a freeboard quoted to a
+    hundredth of a foot from an offset good to fifteen. That is the same failure as an
+    unlabelled unit rather than a smaller one: the number is wrong by a margin nothing in
+    the output discloses, and it is wrong in the direction of confidence.
+    """
+    method = (station.altitude_method or "").strip().rstrip(".")
+    derived = any(fragment in method.lower() for fragment in _INTERPOLATED)
+
+    if station.altitude_accuracy is None:
+        said = "The service publishes no accuracy for that offset"
+        consequence = (
+            "so how far it can be trusted is unknown and a freeboard through it carries "
+            "an error of unstated size"
+        )
+    else:
+        feet = station.altitude_accuracy.magnitude
+        said = f"That offset is published as accurate to {feet:g} ft"
+        consequence = (
+            f"so a freeboard computed through it cannot be tighter than {feet:g} ft, "
+            f"whatever precision the stage was read to"
+            if feet >= COARSE_OFFSET_FEET
+            else "which is finer than a stage is usually read, so the offset is not the "
+            "limiting term here"
+        )
+
+    how = f", determined by: {method}" if method else ""
+    warning = (
+        " The offset was not surveyed at the gage, so it describes the ground near the "
+        "station rather than the station's zero."
+        if derived
+        else ""
+    )
+    return f"{said}{how}, {consequence}.{warning}"
+
+
 def _measured(readings: Iterable[Reading]) -> list[tuple[Reading, Q]]:
     """Readings that hold a value, each paired with it.
 
@@ -293,12 +348,13 @@ class Toolkit:
         US is the USGS network; FR is Hub'Eau. The other filters carry the meaning each
         agency gives them, which is stated on each argument rather than assumed to match.
         """
-        if country.strip().upper() == "FR":
+        asked = country.strip().upper()
+        if asked == "FR":
             return self._find_french(
                 river=river, commune=county, department=hydrologic_unit_code,
                 region=state, bbox=bbox, limit=limit,
             )
-        if country.strip().upper() != "US":
+        if asked != "US":
             return Result.failure(
                 ErrorCode.INVALID_ARGUMENTS,
                 f"no network is named {country!r}",
@@ -355,7 +411,7 @@ class Toolkit:
         return Result(ok=True, data={"locations": found, "count": len(found)})
 
     @_guarded
-    def describe_location(self, identifier: str) -> Result:
+    def describe_location(self, identifier: str, on_datum: str | None = None) -> Result:
         """Metadata for one location, including the frames its readings depend on."""
         if ea.is_ea(identifier):
             return self._describe_ea(identifier)
@@ -391,6 +447,12 @@ class Toolkit:
             else self.session.record(
                 "describe_location", "altitude", station.altitude
             ),
+            "altitude_accuracy": None
+            if station.altitude_accuracy is None
+            else self.session.record(
+                "describe_location", "altitude_accuracy", station.altitude_accuracy
+            ),
+            "altitude_method": station.altitude_method,
         }
         result = Result(ok=True, data=described)
 
@@ -401,17 +463,208 @@ class Toolkit:
                 f"national datum. Comparing it against an absolute elevation will be "
                 f"refused rather than answered."
             )
+            if on_datum:
+                result.note(
+                    f"No conversion onto {on_datum} was attempted, because there is no "
+                    f"altitude to convert. The comparison stays refused."
+                )
         else:
             result.note(
                 f"A stage here is measured from {station.gage_datum}, whose zero is at "
                 f"{station.altitude.magnitude:g} ft on {station.vertical_datum}. Add that "
                 f"offset before comparing a stage against an elevation."
             )
+            result.note(_offset_confidence(station))
+            if on_datum:
+                self._shift_offset(station, on_datum, described, result)
         if station.drainage_area is not None:
             result.note(
                 "The service publishes drainage area without a unit; it is square miles."
             )
         return result
+
+    def _shift_offset(
+        self,
+        station: Location,
+        target: str,
+        described: dict[str, Any],
+        result: Result,
+    ) -> None:
+        """Express the gage-datum offset on another national datum, or say why not.
+
+        This is the conversion the package spent its first releases refusing. The refusal
+        was right and stays right where the conversion cannot be made; what changes is that
+        for most stations it now can be, and a refusal that could have been an answer is
+        only honest once.
+
+        Registering the converted offset is the part that does work beyond the note: it is
+        what lets a stage measured from this station's own zero be shifted onto the target
+        datum by `to_datum`, which until now had no offset to shift it by.
+        """
+        if station.vertical_datum == target:
+            result.note(
+                f"No conversion was needed: the offset is already on {target}. Nothing was "
+                f"requested from the datum service."
+            )
+            return
+
+        try:
+            conversion = self.session.on_datum(station, target)
+        except (vdatum.ConversionRefused, vdatum.NoCoverage) as refused:
+            result.note(
+                f"The offset was not converted onto {target}: {refused}. A stage here "
+                f"still cannot be differenced against an elevation on {target}, and the "
+                f"comparison stays refused rather than approximated."
+            )
+            return
+        except (ServiceUnavailable, QuotaExhausted) as unavailable:
+            result.note(
+                f"The datum service could not be reached, so the offset was not converted "
+                f"onto {target}: {unavailable}. This is a failure to ask rather than an "
+                f"answer of no, and the request can be repeated."
+            )
+            return
+
+        datums.register_offset(
+            station.gage_datum, target, conversion.elevation.to("meter").magnitude
+        )
+        combined = conversion.combined_with(station.altitude_accuracy)
+        described["altitude_on_requested_datum"] = self.session.record(
+            "describe_location", "altitude_on_requested_datum", conversion.elevation
+        )
+        described["conversion_uncertainty"] = (
+            None
+            if conversion.uncertainty is None
+            else self.session.record(
+                "describe_location", "conversion_uncertainty", conversion.uncertainty
+            )
+        )
+        described["offset_uncertainty"] = (
+            None
+            if combined is None
+            else self.session.record_derived(
+                combined, f"combined offset uncertainty at {station.id} on {target}"
+            )
+        )
+
+        bound = "" if combined is None else f" A freeboard through it is bounded by {combined.magnitude:.2g} ft."
+        result.note(
+            f"The offset is published on {station.vertical_datum} and has been converted "
+            f"onto {target}: {conversion.elevation.magnitude:g} ft. A stage here can now "
+            f"be shifted onto {target}.{bound}"
+        )
+        if conversion.uncertainty is not None and station.altitude_accuracy is not None:
+            result.note(
+                f"That bound is the station's own published accuracy "
+                f"({station.altitude_accuracy.magnitude:g} ft) and the conversion's "
+                f"uncertainty ({conversion.uncertainty.magnitude:g} ft) added in "
+                f"quadrature. The larger term decides it."
+            )
+        frame = vdatum.FRAMES.get(target)
+        if frame is not None and frame.tidal and station.altitude is not None:
+            shift = abs(conversion.elevation.magnitude - station.altitude.magnitude)
+            spread = None if conversion.uncertainty is None else conversion.uncertainty.magnitude
+            result.note(
+                f"{target} is a tidal datum, defined by the average of a tidal extreme over "
+                f"a nineteen-year epoch rather than by a fixed surface. It exists only where "
+                f"the tide reaches, so a station above the head of tide has no conversion "
+                f"onto it however close to the coast it looks."
+            )
+            if spread is not None and spread > shift:
+                result.note(
+                    f"Here the uncertainty of that transformation ({spread:g} ft) is larger "
+                    f"than the shift it applies ({shift:g} ft). The shift is still the right "
+                    f"correction and it is still worth making; it is not a figure to quote "
+                    f"to more than about a foot."
+                )
+
+    def _shift_passes(
+        self, feature_id: str, usable: list[Any], target: str, result: Result
+    ) -> None:
+        """Move a reach's satellite elevations onto a datum a survey could be on.
+
+        One conversion serves every pass. The separation between two vertical surfaces is a
+        property of the position and not of the height above it, which was checked against
+        the service at three heights an order of magnitude apart and came back identical to
+        four decimal places. So the reach is converted once and the shift applied to each
+        observation, rather than spending a request per overpass.
+
+        Most of the world is outside this service. SWOT observes every river on the planet
+        and VDatum covers the United States, so the ordinary outcome here is a refusal, and
+        it says which of the two is the reason.
+        """
+        located = next((p for p in usable if p.longitude is not None), None)
+        if located is None or located.elevation is None:
+            result.note(
+                f"No conversion onto {target} was made: this reach's centreline is not in "
+                f"the response, and a datum conversion depends on where it is asked."
+            )
+            return
+
+        try:
+            conversion = self.session.converted(
+                located.latitude, located.longitude, located.elevation, target
+            )
+        except vdatum.NoCoverage:
+            result.note(
+                f"This reach is outside the datum service's coverage, which is the United "
+                f"States, so its elevations cannot be moved onto {target}. SWOT observes "
+                f"rivers everywhere and NOAA converts datums in one country; where the two "
+                f"do not overlap the comparison stays refused."
+            )
+            return
+        except vdatum.ConversionRefused as refused:
+            result.note(f"The elevations were not converted onto {target}: {refused}.")
+            return
+        except (ServiceUnavailable, QuotaExhausted) as unavailable:
+            result.note(
+                f"The datum service could not be reached, so nothing was converted onto "
+                f"{target}: {unavailable}. This is a failure to ask rather than an answer "
+                f"of no."
+            )
+            return
+
+        separation = conversion.elevation.magnitude - located.elevation.magnitude
+        unit = conversion.elevation.units
+        if abs(Q(separation, unit).to("meter").magnitude) > vdatum.MAX_SEPARATION_METRES:
+            # Not a possible separation between any two datums here, so it is a separation
+            # between two numbers that do not belong together. Applying it would produce
+            # elevations in the right unit, carrying the right datum, wrong by hundreds of
+            # metres and checkable by nothing downstream.
+            result.note(
+                f"The conversion onto {target} was discarded: it implies a separation of "
+                f"{separation:+g} {unit_text(unit)} from {SATELLITE_DATUM}, which is larger "
+                f"than any real separation between these datums. Something is mismatched "
+                f"between the reach and the conversion, and the elevations are left on the "
+                f"geoid rather than moved by a figure that cannot be right."
+            )
+            return
+        for observation, shown in zip(usable, result.data["observations"]):
+            if observation.elevation is None:
+                continue
+            moved = Q(
+                observation.elevation.to(unit).magnitude + separation, unit, datum=target
+            )
+            shown["elevation_on_requested_datum"] = self.session.record(
+                "get_satellite_passes", "elevation_on_requested_datum", moved
+            )
+
+        result.data["datum_separation"] = self.session.record_derived(
+            Q(separation, unit), f"{SATELLITE_DATUM} to {target} separation at {feature_id}"
+        )
+        result.note(
+            f"Elevations have been moved from {SATELLITE_DATUM} onto {target} by "
+            f"{separation:+g} {unit_text(unit)}, one conversion taken at a point on the "
+            f"reach and applied to every pass. The separation is a property of the position "
+            f"rather than of the height, so this is exact for the reach and not an average "
+            f"over it."
+        )
+        if conversion.uncertainty is None:
+            result.note(
+                f"The datum service publishes no uncertainty for a geoid conversion, so "
+                f"how well that shift is known is unstated. The per-pass uncertainty the "
+                f"mission publishes is about the measurement and does not cover it."
+            )
 
     # Observations -------------------------------------------------------------------
 
@@ -830,7 +1083,7 @@ class Toolkit:
 
     @_guarded
     def get_satellite_passes(
-        self, feature_id: str, start: str, end: str
+        self, feature_id: str, start: str, end: str, on_datum: str | None = None
     ) -> Result:
         """Water surface elevation measured from orbit, by the SWOT mission.
 
@@ -872,7 +1125,7 @@ class Toolkit:
                     "get_satellite_passes", "elevation", observation.elevation
                 )
 
-        return Result(
+        result = Result(
             ok=True,
             data={
                 "reach": feature_id,
@@ -890,12 +1143,16 @@ class Toolkit:
                     for p in usable
                 ],
             },
-        ).note(
+        )
+        result.note(
             f"Elevations here are on {SATELLITE_DATUM}, a geoid, and a stage or a survey "
             f"is not. Differencing them will be refused rather than answered, because the "
             f"offset between the two varies with position and neither service publishes "
             f"it."
         )
+        if on_datum:
+            self._shift_passes(feature_id, usable, on_datum, result)
+        return result
 
     # Network --------------------------------------------------------------------------
 

@@ -50,6 +50,7 @@ from .era5 import Climate
 from .grace import Granule, Gravimetry
 from .jobs import CredentialsMissing, Job, JobFailed, JobNotReady
 from .swot import NoObservations, Pass, Satellite
+from .vdatum import Conversion, ConversionRefused, NoCoverage, VerticalDatums
 from .service import (
     BASE_URL,
     COLLECTIONS,
@@ -88,6 +89,10 @@ __all__ = [
     "NoObservations",
     "Pass",
     "Satellite",
+    "Conversion",
+    "ConversionRefused",
+    "NoCoverage",
+    "VerticalDatums",
     "NetworkSite",
     "NotOnTheNetwork",
     "read_camels",

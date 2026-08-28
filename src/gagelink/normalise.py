@@ -272,6 +272,18 @@ class Location:
     longitude: float | None = None
     altitude: Q | None = None
     vertical_datum: str | None = None
+    #: How well the altitude above is known, as the service publishes it, in feet. This is
+    #: the uncertainty on the offset a freeboard depends on, and across 3,397 gaged stream
+    #: stations in four states it is worse than a foot for 72% of them: the commonest value
+    #: is 15 feet, and only about one in twenty is levelled to a hundredth. A stage read to
+    #: a hundredth of a foot, shifted onto a national datum by an offset known to fifteen,
+    #: gives a freeboard whose printed precision is three orders out from its accuracy.
+    altitude_accuracy: Q | None = None
+    #: How the altitude was determined. A third of them are interpolated from a topographic
+    #: map and a fifth are recorded as unknown, so "the station publishes an altitude" and
+    #: "somebody surveyed the gage datum" are different claims and only the first is true
+    #: at most stations.
+    altitude_method: str | None = None
     drainage_area: Q | None = None
     timezone: str | None = None
     agency: str | None = None
@@ -397,6 +409,13 @@ def location_from(feature: Mapping[str, Any]) -> Location:
             float(props["altitude"]), ALTITUDE_UNIT, datum=str(props["vertical_datum"])
         )
 
+    # Published in the same units as the altitude and, like the altitude, with no unit
+    # stated on the field. Read only where there is an altitude for it to qualify, since
+    # an accuracy on nothing is not a fact about anything.
+    accuracy = None
+    if altitude is not None and props.get("altitude_accuracy") is not None:
+        accuracy = Q(float(props["altitude_accuracy"]), ALTITUDE_UNIT)
+
     area = None
     if props.get("drainage_area") is not None:
         area = Q(float(props["drainage_area"]), DRAINAGE_AREA_UNIT)
@@ -409,6 +428,8 @@ def location_from(feature: Mapping[str, Any]) -> Location:
         longitude=coords[0],
         altitude=altitude,
         vertical_datum=props.get("vertical_datum"),
+        altitude_accuracy=accuracy,
+        altitude_method=props.get("altitude_method_name"),
         drainage_area=area,
         timezone=timezone_of(
             props.get("time_zone_abbreviation"), props.get("uses_daylight_savings")

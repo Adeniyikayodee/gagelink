@@ -26,6 +26,8 @@ from typing import Any, Iterable, Mapping
 
 from quantity_guard import Q
 
+from .results import significant
+
 from .service import (
     USER_AGENT,
     Cache,
@@ -128,18 +130,6 @@ def ring_area(ring: Iterable[tuple[float, float]]) -> float:
     return abs(total * EARTH_RADIUS_M * EARTH_RADIUS_M / 2.0)
 
 
-def _significant(value: float, digits: int = 4) -> float:
-    """Round to a precision the geometry supports.
-
-    A delineated boundary is generalised, so reporting an area to twelve significant
-    figures asserts a precision the polygon does not have and invites the figure being
-    quoted against a surveyed one as though the two were comparable.
-    """
-    if value == 0:
-        return 0.0
-    return round(value, -int(math.floor(math.log10(abs(value)))) + (digits - 1))
-
-
 def basin_from(identifier: str, payload: Mapping[str, Any]) -> Basin | None:
     """Build a basin from a `/basin` response, or None where none was delineated."""
     features = payload.get("features") or []
@@ -164,7 +154,7 @@ def basin_from(identifier: str, payload: Mapping[str, Any]) -> Basin | None:
     return Basin(
         identifier=identifier,
         ring=points,
-        area=Q(_significant(ring_area(points) / SQUARE_METRES_PER_SQUARE_MILE), "mile**2"),
+        area=Q(significant(ring_area(points) / SQUARE_METRES_PER_SQUARE_MILE), "mile**2"),
         bbox=(min(longitudes), min(latitudes), max(longitudes), max(latitudes)),
     )
 
