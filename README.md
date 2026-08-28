@@ -215,6 +215,29 @@ gagelink-mcp --http                 # http://127.0.0.1:8765/mcp
 Loopback, `Origin` checked, one session and toolkit per conversation. No authentication —
 `--host` on a reachable interface gives away your hourly allowance.
 
+### Which revision of MCP
+
+Both eras. `2026-07-28` removed the `initialize` handshake and made every request carry its
+own version and capabilities, so a client speaking it calls a tool on its first message and
+finds out what the server is with `server/discover`. The three handshake revisions before it
+(`2025-06-18`, `2025-03-26`, `2024-11-05`) still open a session and keep it.
+
+Serving one alone is not an option in either direction: a modern client against a
+handshake-only server fails outright, and a handshake client has no way to fall forward. So
+a request carrying per-request metadata is answered statelessly and an `initialize` request
+is answered as it always was, and neither has learned anything about the other.
+
+The modern revision says an open connection is not a conversation — one stdio process may
+carry several, interleaved. A ledger that spans a conversation therefore cannot be scoped to
+the process, so a client that wants its own puts a name in `_meta`:
+
+```json
+{"_meta": {"io.github.adeniyikayodee.gagelink/conversation": "whatever-you-call-it"}}
+```
+
+Each name gets its own manifest, quantities and checks. A client that sends none shares the
+default, which is what a single-conversation client always had.
+
 The tool descriptions are part of the product rather than documentation of it. In the
 quantity-guard evaluation, declaring physical metadata in the schema without enforcing it
 still recovered a third of the runs that failed at baseline, so what a description says about
@@ -222,7 +245,9 @@ datums, units, and provisional record does work before any validation runs.
 
 A tool failure is content marked in error, not a protocol fault, so the repair stays in
 front of the model. Same for a fault inside the tool — a field renamed upstream arrives as
-`INTERNAL_ERROR` with a repair, not a dead turn. The session resets on `initialize`.
+`INTERNAL_ERROR` with a repair, not a dead turn. Under the handshake revisions the session
+resets on `initialize`; under `2026-07-28` there is no handshake to reset on, and the
+conversation name above is what keeps two of them apart.
 
 ## Outside the United States
 

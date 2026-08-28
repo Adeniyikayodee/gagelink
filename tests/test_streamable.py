@@ -1,5 +1,6 @@
 """The Streamable HTTP transport: sessions, origins, and the methods it answers."""
 
+import base64
 import json
 import threading
 import urllib.error
@@ -7,6 +8,7 @@ import urllib.request
 
 import pytest
 
+from gagelink.protocol import CONVERSATION_KEY, MODERN_VERSION
 from gagelink.server import Server
 from gagelink.streamable import Sessions, origin_is_allowed, serve_http
 from test_server import offline
@@ -191,3 +193,171 @@ def test_sessions_are_bounded_so_a_long_lived_server_does_not_grow():
     assert sessions.get(first) is None
     sessions.close_all()
     assert len(sessions) == 0
+
+
+# The 2026-07-28 revision ----------------------------------------------------------------------
+#
+# This transport changed as well as the messages on it: no session to mint, no GET stream to
+# open, and headers mirroring fields out of the body so an intermediary can route without
+# parsing it. Those headers are checked against the body here, which is what stops a request
+# being routed on one value and answered on another.
+
+
+def modern(method, name=None, version=MODERN_VERSION, conversation=None):
+    """The body and headers of one modern request, which carry the same facts twice."""
+    fields = {
+        "io.modelcontextprotocol/protocolVersion": version,
+        "io.modelcontextprotocol/clientCapabilities": {},
+    }
+    if conversation is not None:
+        fields[CONVERSATION_KEY] = conversation
+    params = {"_meta": fields}
+    if method == "tools/call":
+        params |= {"name": name, "arguments": {"identifier": "USGS-07374000"}}
+    headers = {"MCP-Protocol-Version": version, "Mcp-Method": method}
+    if name is not None:
+        headers["Mcp-Name"] = name
+    return {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}, headers
+
+
+def test_a_modern_request_is_answered_without_a_session_being_minted(endpoint):
+    """There is nothing left to initialise. A client that has never spoken to this endpoint
+    calls a tool on its first request."""
+    body, headers = modern("tools/call", "describe_location")
+    status, sent, answer = ask(endpoint, body, headers)
+    assert status == 200
+    assert "Mcp-Session-Id" not in sent
+    assert answer["result"]["resultType"] == "complete"
+    assert json.loads(answer["result"]["content"][0]["text"])["data"]["gage_datum"]
+
+
+def test_discover_is_answered_on_a_cold_endpoint(endpoint):
+    body, headers = modern("server/discover")
+    status, _, answer = ask(endpoint, body, headers)
+    assert status == 200
+    assert MODERN_VERSION in answer["result"]["supportedVersions"]
+
+
+@pytest.mark.parametrize("dropped", ["Mcp-Method", "MCP-Protocol-Version", "Mcp-Name"])
+def test_a_required_mirrored_header_that_is_missing_is_a_mismatch(endpoint, dropped):
+    """Absence is a mismatch as much as disagreement is: a request without these is one an
+    intermediary could not have routed, which makes it indistinguishable from one routed on
+    something else."""
+    body, headers = modern("tools/call", "describe_location")
+    del headers[dropped]
+    status, _, answer = ask(endpoint, body, headers)
+    assert status == 400
+    assert answer["error"]["code"] == -32020
+
+
+def test_a_header_that_disagrees_with_the_body_is_refused_rather_than_resolved(endpoint):
+    """Picking either value is a guess about whether the thing that routed the request or
+    the thing about to answer it was right."""
+    body, headers = modern("tools/call", "describe_location")
+    headers["Mcp-Name"] = "get_latest"
+    status, _, answer = ask(endpoint, body, headers)
+    assert status == 400
+    assert answer["error"]["code"] == -32020
+    assert "Mcp-Name" in answer["error"]["message"]
+
+
+def test_a_version_header_that_disagrees_with_the_body_is_refused(endpoint):
+    body, headers = modern("tools/list")
+    headers["MCP-Protocol-Version"] = "2025-06-18"
+    status, _, answer = ask(endpoint, body, headers)
+    assert status == 400
+    assert answer["error"]["code"] == -32020
+
+
+def test_a_name_the_client_had_to_encode_is_decoded_before_it_is_compared(endpoint):
+    """A tool name is only advised to stay inside the characters a header may carry, so the
+    transport defines an encoding for the ones that do not. Comparing without decoding would
+    make every encoded name look like a mismatch."""
+    body, headers = modern("tools/call", "describe_location")
+    encoded = base64.b64encode(b"describe_location").decode()
+    headers["Mcp-Name"] = f"=?base64?{encoded}?="
+    status, _, answer = ask(endpoint, body, headers)
+    assert status == 200
+    assert json.loads(answer["result"]["content"][0]["text"])["ok"] is True
+
+
+def test_a_revision_this_server_does_not_speak_is_a_400_naming_the_ones_it_does(endpoint):
+    """A dual-era client reads the body of exactly this response to decide whether to retry
+    at another version or fall back to the handshake."""
+    body, headers = modern("tools/list", version="2030-01-01")
+    status, _, answer = ask(endpoint, body, headers)
+    assert status == 400
+    assert answer["error"]["code"] == -32022
+    assert MODERN_VERSION in answer["error"]["data"]["supported"]
+
+
+def test_an_unimplemented_method_is_a_404_carrying_a_json_rpc_error(endpoint):
+    """The body is what separates this from the 404 of a server that does not host a modern
+    endpoint at all."""
+    body, headers = modern("resources/list")
+    status, _, answer = ask(endpoint, body, headers)
+    assert status == 404
+    assert answer["error"]["code"] == -32601
+
+
+def test_a_session_header_from_an_older_client_is_ignored_rather_than_refused(endpoint):
+    """The revision says to ignore it and to mint none in return, which is what lets a
+    client that is half-migrated keep working."""
+    body, headers = modern("tools/list")
+    status, sent, answer = ask(endpoint, body, headers | {"Mcp-Session-Id": "a" * 32})
+    assert status == 200
+    assert "Mcp-Session-Id" not in sent
+    assert answer["result"]["tools"]
+
+
+def test_named_conversations_do_not_meet_over_one_endpoint(endpoint):
+    """One process serving two people without either one's manifest picking up the other's
+    retrievals, which is now the client's name for the conversation rather than a session
+    the server handed out."""
+    body, headers = modern("tools/call", "get_latest", conversation="mine")
+    ask(endpoint, body, headers)
+
+    body, headers = modern("tools/call", "export_manifest", conversation="mine")
+    body["params"]["arguments"] = {}
+    _, _, mine = ask(endpoint, body, headers)
+
+    body, headers = modern("tools/call", "export_manifest", conversation="theirs")
+    body["params"]["arguments"] = {}
+    _, _, theirs = ask(endpoint, body, headers)
+
+    assert json.loads(mine["result"]["content"][0]["text"])["data"]["retrievals"]
+    assert json.loads(theirs["result"]["content"][0]["text"])["data"]["retrievals"] == []
+
+
+def test_the_handshake_still_works_alongside_it(endpoint):
+    """The dual-era row of the compatibility matrix, and the one that keeps every client
+    already configured against this server answering."""
+    session_id, result = initialise(endpoint)
+    assert result["protocolVersion"] == "2025-06-18"
+
+    status, _, answer = ask(
+        endpoint,
+        {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+        {"Mcp-Session-Id": session_id},
+    )
+    assert status == 200
+    assert "resultType" not in answer["result"]
+
+
+def test_an_oversized_body_gets_the_refusal_and_not_a_broken_pipe(endpoint):
+    """Found by a black-box client in a container. The server answers 413 without reading
+    the body, which is the point of checking the length first, but a keep-alive connection
+    with an unread body on it makes the client see a transport failure instead of the
+    explanation. The connection is closed so the 413 arrives."""
+    oversized = b"{" + b"x" * (2 << 20)
+    request = urllib.request.Request(
+        endpoint, oversized, {"Content-Type": "application/json"}
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            status, headers = response.status, dict(response.headers)
+    except urllib.error.HTTPError as exc:
+        status, headers = exc.code, dict(exc.headers)
+
+    assert status == 413
+    assert headers.get("Connection", "").lower() == "close"

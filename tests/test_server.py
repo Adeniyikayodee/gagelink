@@ -11,7 +11,8 @@ from gagelink.nldi import Network
 from gagelink.nwps import Forecasts
 from gagelink.results import ErrorCode
 from gagelink.schema import validate
-from gagelink.server import PROTOCOL_VERSION, TOOLS, Server, serve_stdio
+from gagelink.server import TOOLS, Server, serve_stdio
+from gagelink.protocol import LEGACY_PROTOCOL_VERSION
 
 FIXTURES = Path(__file__).parent / "fixtures"
 LOCATION = json.loads((FIXTURES / "monitoring_location_07374000.json").read_text())
@@ -92,7 +93,7 @@ def test_initialize_announces_the_server_and_the_protocol(server):
     from gagelink.server import dispatch
 
     result = dispatch(server, "initialize", {})
-    assert result["protocolVersion"] == PROTOCOL_VERSION
+    assert result["protocolVersion"] == LEGACY_PROTOCOL_VERSION
     assert result["serverInfo"]["name"] == "gagelink"
     assert "tools" in result["capabilities"]
 
@@ -341,7 +342,7 @@ def test_a_revision_this_server_does_not_speak_is_answered_in_the_newest(server)
     from gagelink.server import dispatch
 
     result = dispatch(server, "initialize", {"protocolVersion": "1999-01-01"})
-    assert result["protocolVersion"] == PROTOCOL_VERSION
+    assert result["protocolVersion"] == LEGACY_PROTOCOL_VERSION
 
 
 def test_every_tool_conforms_to_its_own_schema_when_it_fails(server):

@@ -6,8 +6,12 @@ still recovered a third of the runs that failed at baseline, so what a descripti
 about datums, units, and provisional record does work before any validation runs. They are
 written for a model that will read them once and then act.
 
-The session resets on `initialize`, so quantities and requests from one conversation cannot
-appear in another's manifest or trip its checks.
+Two revisions of the protocol are served from here, and `protocol.py` decides which one a
+request is speaking. Under the handshake revisions the session resets on `initialize`, so
+quantities and requests from one conversation cannot appear in another's manifest or trip
+its checks. The modern revision has no handshake to reset on and forbids reading a
+conversation out of the connection, so a client names its conversation on each request
+instead and gets a ledger of its own; one that names none shares the default.
 """
 
 from __future__ import annotations
@@ -19,19 +23,35 @@ import sys
 from typing import Any, Callable
 
 from . import __version__
+from .protocol import (
+    COMPLETE,
+    LEGACY_PROTOCOL_VERSION,
+    LEGACY_PROTOCOL_VERSIONS,
+    SERVER_INFO_KEY,
+    SUPPORTED_VERSIONS,
+    Envelope,
+    MethodNotFound,
+    ProtocolError,
+    read_envelope,
+)
 from .results import DEFAULT_BUDGET_TOKENS, ErrorCode, Result
 from .schema import validate
 from .session import Session
 from .tools import RAISE_INTERNAL, Toolkit
 
-PROTOCOL_VERSION = "2025-06-18"
+#: How this server names itself, in the one shape both revisions want it in. The modern
+#: revision puts it in a result's `_meta` and the handshake revisions put it in the
+#: handshake, but it is the same three fields either way.
+SERVER_INFO: dict[str, Any] = {
+    "name": "gagelink",
+    "title": "Hydrology data: rivers, gages, forecasts, basins",
+    "version": __version__,
+}
 
-#: The revisions this server can speak, newest first. A client asking for one of these is
-#: answered in it; a client asking for anything else is answered in the newest, which is
-#: what the specification says to do and is why the list exists rather than a constant.
-#: Nothing here differs between the three except the fields a client may send, which are
-#: additive, so supporting the older two costs nothing and refusing them costs a client.
-SUPPORTED_PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26", "2024-11-05")
+#: How long a client may hold the discovery answer. Nothing in it changes while the process
+#: runs: the tool list is built at import and the version list is a constant. An hour is
+#: short enough that a client which caches across a version upgrade is wrong only briefly.
+DISCOVERY_TTL_MS = 3_600_000
 
 #: Sent to the client at handshake and put in front of the model before it calls anything.
 #: This is the one piece of text that reaches every conversation, so it carries the things
@@ -667,12 +687,24 @@ def _annotate(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
 TOOLS = _annotate(TOOLS)
 
 
+#: How many named conversations one process will hold ledgers for at once. A bound is
+#: needed because nothing in the modern revision ends a conversation: there is no
+#: `initialize` to reset on and no close to wait for, so a server that kept every
+#: conversation it was ever sent would grow until the process died. The oldest goes first,
+#: which costs that conversation its manifest and costs the others nothing.
+MAX_CONVERSATIONS = 32
+
+
 class Server:
     """The toolkit behind the MCP protocol.
 
-    Holds one session at a time, replaced whenever a client initialises, so that a
-    long-lived server process does not accumulate one conversation's quantities into the
-    next one's manifest.
+    Holds a ledger per conversation. Under the handshake revisions there is one, replaced
+    whenever a client initialises, so that a long-lived process does not accumulate one
+    conversation's quantities into the next one's manifest. Under the modern revision the
+    connection says nothing about which conversation a request belongs to, so the client
+    names it and each name gets a ledger; a client that names none shares the default,
+    which is the same arrangement as before and is now a stated fallback rather than an
+    assumption about how the process is used.
     """
 
     def __init__(
@@ -686,10 +718,11 @@ class Server:
         self._factory = session_factory or (lambda: Session(api_key=self.api_key))
         self.session: Session | None = None
         self.toolkit: Toolkit | None = None
+        self._named: dict[str, tuple[Session, Toolkit]] = {}
         self.begin_session()
 
     def begin_session(self, question: str = "") -> None:
-        """Start a fresh session, closing any the previous client left open."""
+        """Start a fresh default session, closing any the previous client left open."""
         if self.session is not None:
             self.session.__exit__(None, None, None)
         session = self._factory()
@@ -698,10 +731,42 @@ class Server:
         self.session = session
         self.toolkit = Toolkit(session, budget_tokens=self.budget_tokens)
 
+    def conversation(self, name: str | None = None) -> tuple[Session, Toolkit]:
+        """The ledger and toolkit a request belongs to, opening one if it is new."""
+        if name is None:
+            assert self.session is not None and self.toolkit is not None
+            return self.session, self.toolkit
+        held = self._named.get(name)
+        if held is not None:
+            return held
+        if len(self._named) >= MAX_CONVERSATIONS:
+            oldest = next(iter(self._named))
+            self._named.pop(oldest)[0].__exit__(None, None, None)
+        session = self._factory()
+        session.__enter__()
+        opened = (session, Toolkit(session, budget_tokens=self.budget_tokens))
+        self._named[name] = opened
+        return opened
+
+    def close(self) -> None:
+        """Close every ledger this server opened, in any revision."""
+        for session, _ in self._named.values():
+            session.__exit__(None, None, None)
+        self._named.clear()
+        if self.session is not None:
+            self.session.__exit__(None, None, None)
+            self.session = None
+            self.toolkit = None
+
     def list_tools(self) -> list[dict[str, Any]]:
         return TOOLS
 
-    def call_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    def call_tool(
+        self,
+        name: str,
+        arguments: dict[str, Any],
+        conversation: str | None = None,
+    ) -> dict[str, Any]:
         """Run a tool and return its result as MCP content.
 
         A failure comes back as content marked in error rather than as a protocol fault,
@@ -711,7 +776,7 @@ class Server:
         and the model's chance of saying what went wrong.
         """
         try:
-            return self._call(name, arguments)
+            return self._call(name, arguments, conversation)
         except Exception as exc:
             if os.environ.get(RAISE_INTERNAL):
                 raise
@@ -725,13 +790,19 @@ class Server:
                 ok=False,
             )
 
-    def _call(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        assert self.toolkit is not None and self.session is not None
+    def _call(
+        self,
+        name: str,
+        arguments: dict[str, Any],
+        conversation: str | None = None,
+    ) -> dict[str, Any]:
+        session, toolkit = self.conversation(conversation)
 
         declared = next((t for t in TOOLS if t["name"] == name), None)
         if declared is None:
             known = ", ".join(sorted(t["name"] for t in TOOLS))
             return self._failed(
+                session,
                 ErrorCode.INVALID_ARGUMENTS,
                 f"no tool named {name!r}",
                 f"The tools are {known}.",
@@ -742,6 +813,7 @@ class Server:
             # Checked against the schema the model was given rather than against the Python
             # signature, so the correction names the contract and not the implementation.
             return self._failed(
+                session,
                 ErrorCode.INVALID_ARGUMENTS,
                 f"{name}: " + "; ".join(wrong),
                 "Correct the arguments against the tool's schema and call it again.",
@@ -749,17 +821,17 @@ class Server:
 
         if name == "export_manifest":
             return self._respond(
-                Result(ok=True, data=self.session.manifest()).to_dict(self.budget_tokens),
+                Result(ok=True, data=session.manifest()).to_dict(self.budget_tokens),
                 ok=True,
             )
 
-        method = getattr(self.toolkit, name)
+        method = getattr(toolkit, name)
         result: Result = method(**arguments)
         return self._respond(result.to_dict(self.budget_tokens), ok=result.ok)
 
-    def _failed(self, code: str, message: str, repair: str) -> dict[str, Any]:
+    def _failed(self, session: Session, code: str, message: str, repair: str) -> dict[str, Any]:
         failure = Result.failure(code, message, repair)
-        failure.quota_remaining = self.session.quota_remaining if self.session else None
+        failure.quota_remaining = session.quota_remaining
         return self._respond(failure.to_dict(self.budget_tokens), ok=False)
 
     def _respond(self, body: dict[str, Any], ok: bool) -> dict[str, Any]:
@@ -779,35 +851,73 @@ class Server:
         return response
 
 
-class MethodNotFound(Exception):
-    """An unsupported JSON-RPC method, which is a -32601 rather than a server fault."""
-
-
 def dispatch(server: Server, method: str, params: dict[str, Any]) -> dict[str, Any]:
+    """Answer one JSON-RPC method, in whichever revision the request is speaking.
+
+    `initialize` is handled before the envelope is read because it is the one method that
+    settles the question by existing: it belongs to the handshake revisions and to nothing
+    else, so a request making it is legacy whatever else it carries.
+    """
     if method == "initialize":
         server.begin_session()
         asked = params.get("protocolVersion")
         return {
             "protocolVersion": (
-                asked if asked in SUPPORTED_PROTOCOL_VERSIONS else PROTOCOL_VERSION
+                asked if asked in LEGACY_PROTOCOL_VERSIONS else LEGACY_PROTOCOL_VERSION
             ),
             "capabilities": {"tools": {}},
-            "serverInfo": {
-                "name": "gagelink",
-                "title": "Hydrology data: rivers, gages, forecasts, basins",
-                "version": __version__,
-            },
+            "serverInfo": dict(SERVER_INFO),
             # Clients surface this to the model before it calls anything, which makes it
             # the highest-leverage text in the package.
             "instructions": INSTRUCTIONS,
+        }
+
+    envelope = read_envelope(method, params)
+    answer = _answer(server, method, params, envelope)
+    return _stamped(answer) if envelope.modern else answer
+
+
+def _answer(
+    server: Server,
+    method: str,
+    params: dict[str, Any],
+    envelope: Envelope,
+) -> dict[str, Any]:
+    if method == "server/discover":
+        # The modern replacement for the handshake, and the probe a dual-era client uses on
+        # stdio to find out which era it is talking to. It has to answer before any version
+        # has been agreed, which is why the supported list is part of the result rather than
+        # something a client learns by failing.
+        return {
+            "supportedVersions": list(SUPPORTED_VERSIONS),
+            "capabilities": {"tools": {}},
+            "instructions": INSTRUCTIONS,
+            "ttlMs": DISCOVERY_TTL_MS,
+            "cacheScope": "public",
         }
     if method == "ping":
         return {}
     if method == "tools/list":
         return {"tools": server.list_tools()}
     if method == "tools/call":
-        return server.call_tool(params.get("name", ""), params.get("arguments") or {})
+        return server.call_tool(
+            params.get("name", ""),
+            params.get("arguments") or {},
+            envelope.conversation,
+        )
     raise MethodNotFound(method)
+
+
+def _stamped(answer: dict[str, Any]) -> dict[str, Any]:
+    """A modern result, which says that it is finished and who answered it.
+
+    `resultType` is what separates a result from one asking the client for more input, and
+    a client is required to read its absence as completion, so stamping it costs a legacy
+    client nothing and is only omitted above to keep those results byte-identical to what
+    they were.
+    """
+    meta = {**(answer.get("_meta") or {}), SERVER_INFO_KEY: dict(SERVER_INFO)}
+    return {**answer, "resultType": COMPLETE, "_meta": meta}
 
 
 def serve_stdio(server: Server, stdin=None, stdout=None) -> None:
@@ -824,18 +934,48 @@ def serve_stdio(server: Server, stdin=None, stdout=None) -> None:
         except json.JSONDecodeError:
             continue
 
-        method, request_id = message.get("method"), message.get("id")
+        if not isinstance(message, dict):
+            # Valid JSON that is not a JSON-RPC message. A bare list is the one that
+            # actually arrives: batching was part of the 2024-11-05 revision, which this
+            # server still answers, and a client that never stopped sending it reaches
+            # here. Reading a field off it raises, and a raise in this loop is the end of
+            # the process, so an old client's habit would take the server down rather than
+            # be told about it. The HTTP transport already refused this; stdio did not.
+            stdout.write(
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": None,
+                        "error": {
+                            "code": -32600,
+                            "message": (
+                                "a request is one JSON-RPC message; batching was withdrawn "
+                                "from the protocol"
+                            ),
+                        },
+                    }
+                )
+                + "\n"
+            )
+            stdout.flush()
+            continue
+
+        # Coerced rather than trusted. A message carrying a method that is not a string is
+        # as malformed as one carrying no method, and both should reach the dispatcher as
+        # a name it will not recognise rather than as a type error inside it.
+        raw_method = message.get("method")
+        method = raw_method if isinstance(raw_method, str) else ""
+        request_id = message.get("id")
         if request_id is None:
             continue  # a notification; nothing to answer
 
         try:
             result = dispatch(server, method, message.get("params") or {})
-        except MethodNotFound as exc:
-            reply = {
-                "jsonrpc": "2.0",
-                "id": request_id,
-                "error": {"code": -32601, "message": f"method not found: {exc}"},
-            }
+        except ProtocolError as exc:
+            # An unknown method, an unsupported revision, or a request that did not say
+            # enough about itself. All of them are answered rather than raised, because a
+            # dual-era client reads exactly these bodies to work out which era it reached.
+            reply = {"jsonrpc": "2.0", "id": request_id, "error": exc.as_error()}
         except Exception as exc:  # a protocol-level failure, not a tool failure
             reply = {
                 "jsonrpc": "2.0",
