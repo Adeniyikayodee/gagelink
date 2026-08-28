@@ -1,122 +1,20 @@
 # GageLink
 
-**Hydrology data AI can trust**
+Hydrology data for AI agents, with the reference frames kept attached.
 
-River levels, flows, forecasts, and flood data, with the context AI needs to use them correctly.
+River levels, streamflow, flood forecasts, drainage basins and satellite water levels from
+USGS, NOAA, Hub'Eau, the UK Environment Agency and SWOT. Every value arrives carrying its
+unit, the datum it was measured from, its timezone, and whether the record is provisional or
+approved.
 
 mcp-name: io.github.Adeniyikayodee/gagelink
 
 **Pre-alpha. The API may change.**
 
-## What it does
-
-GageLink gives AI agents access to hydrology data from USGS, NOAA, Hub'Eau, the UK Environment Agency, and SWOT.
-
-Every value keeps its:
-
-* Unit
-* Datum
-* Timezone
-* Data quality
-* Provisional or approved status
-
-This helps AI use water data without silently mixing incompatible numbers.
-
-## What can it answer?
-
-* How high is the river?
-* Is it above flood stage?
-* How much freeboard is left?
-* What is the current flow?
-* How does it compare with the record peak?
-* What is the forecast?
-* Will the river reach a flood level?
-* What is upstream or downstream?
-* How large is the drainage basin?
-* Has a historical measurement been revised?
-* Is a reading provisional or approved?
-
-## The problem
-
-Water data often looks simple:
-
-`3.02 ft`
-
-But that number is not enough.
-
-A river stage may be measured from a local gage datum. A surveyed elevation may use NAVD88. Both are measured in feet, so a normal unit checker will think they can be subtracted.
-
-They cannot.
-
-GageLink refuses unsafe calculations instead of giving a plausible-looking answer. It provides the information needed to make the calculation correctly.
-
-## Why this matters
-
-AI agents can make simple mistakes with physical data.
-
-For example, a model can use:
-
-`3010 ft³/s`
-
-when the tool expects:
-
-`2.95 kcfs`
-
-Or it can subtract a gage height from an elevation that uses a different datum.
-
-These errors can produce answers that look reasonable but are wrong.
-
-GageLink keeps the physical context attached to the number and checks it when the agent uses the data.
-
-## How it works
-
-A normal API gives an agent a number.
-
-GageLink gives the agent a number **with its meaning**.
-
-For example:
-
-```text
-1.35 ft³/s
-provisional
-
-9.11 ft
-GAGE:06730500
-provisional
-```
-
-A stage can also be converted to another datum when the required information is available.
-
-If it is not available, GageLink refuses the conversion instead of guessing.
-
-## Tools
-
-GageLink provides tools for:
-
-| Tool                   | What it does                          |
-| ---------------------- | ------------------------------------- |
-| `find_locations`       | Find monitoring stations              |
-| `describe_location`    | Get station metadata                  |
-| `get_latest`           | Get the latest readings               |
-| `get_series`           | Get historical data                   |
-| `slice_series`         | Work with part of a series            |
-| `get_peaks`            | Get annual peak flows                 |
-| `get_forecast`         | Get forecasts and flood thresholds    |
-| `get_model_forecast`   | Get modelled flow for ungaged reaches |
-| `get_satellite_passes` | Get water levels measured from orbit  |
-| `navigate_network`     | Find upstream or downstream stations  |
-| `get_basin`            | Get the drainage basin                |
-| `lookup_parameter`     | Understand parameter codes            |
-| `export_manifest`      | Export what answered a question       |
-
-All tools are read-only.
-
-## Built for AI agents
-
-GageLink can run as an MCP server.
+## Install
 
 ```bash
-gagelink-mcp
+pip install gagelink
 ```
 
 To use it from an MCP client, with nothing installed:
@@ -132,71 +30,177 @@ To use it from an MCP client, with nothing installed:
 }
 ```
 
-It can also run over HTTP for clients that cannot start a local process.
+No account is needed. A free key from
+[api.waterdata.usgs.gov/signup](https://api.waterdata.usgs.gov/signup) raises the allowance
+from 50 requests an hour to 1,000. Set it as `GAGELINK_API_KEY`.
 
-The tools return structured data, so units, datums, quality, and other metadata are fields rather than text an agent has to guess from.
+## What can it answer?
 
-## Beyond the US
+* How high is the river, and how does that compare with flood stage?
+* How much freeboard is there between the water and a surveyed levee crest?
+* What is the flow now, and what fraction of the record peak is that?
+* What is forecast over the next few days, and does it cross a flood category?
+* What lies upstream or downstream along the river network?
+* How large is the basin draining to this point?
+* What did a station record over a date range, and has that record been revised?
+* What is the water surface elevation of a river with no gage on it?
+* Is a reading provisional or approved, and how old is it?
 
-GageLink currently supports:
+## Why the frames matter
 
-* **US:** USGS, NOAA and NLDI
-* **France:** Hub'Eau
-* **UK:** Environment Agency
-* **Global:** SWOT and selected datasets such as ERA5, GRACE and HydroBASINS
+At Little Falls on the Potomac, a river stage of `3.02 ft` is measured upward from the
+gage's own zero. A surveyed levee crest of `41 ft` is measured upward from a national datum.
+Both are lengths in feet, so subtracting one from the other produces a number that reads as
+freeboard, and a units library will pass it.
 
-Support differs by service. For example, the UK Environment Agency currently provides location and reading tools, while the US services provide the wider set of forecasting, basin and network tools.
+The gage zero at this station sits 37.04 ft above NAVD88, so the stage is 40.06 ft on that
+datum and the freeboard is 0.94 ft. Subtracting without the offset gives 37.98 ft, which
+overstates the margin by a factor of 40 in the direction of calling a levee safe.
 
-## A simple example
+GageLink refuses that subtraction and returns the offset that makes it well defined. The
+same applies to satellite elevations, which sit on a geoid, and to modelled flows, which may
+have no measurement behind them.
 
-Suppose an agent wants to calculate flood protection:
+`python demo/freeboard.py` runs the whole example offline from recorded responses.
+
+## Converting a datum
+
+The offset is available for most stations, so the refusal can become an answer. Pass
+`on_datum` to `describe_location` and the station's offset is converted through NOAA's
+VDatum, with the uncertainty of the conversion returned beside it:
 
 ```text
-River stage: 3.02 ft
-Levee crest: 41 ft NAVD88
+altitude_of_gage_datum        4860 ft (NGVD29)      Boulder Creek at mouth, CO
+altitude_accuracy             10 ft, interpolated from a topographic map
+altitude_on_requested_datum   4863.061 ft (NAVD88)
+conversion_uncertainty        0.17 ft
+offset_uncertainty            10 ft
 ```
 
-GageLink does not simply subtract the two.
+Two things this surfaces are easy to miss.
 
-It first checks the reference frames.
+**The offset has an accuracy of its own.** Across 7,361 USGS stream stations sampled in four
+states, 3,397 publish an altitude for their gage datum. Of those, 72% are known no better
+than a foot. The commonest published accuracy is 15 ft, a third were interpolated from a
+topographic map, and about one in twenty is levelled to a hundredth. A freeboard is bounded
+by that figure whatever precision the stage was read to, so `describe_location` returns it
+alongside the method used to determine it.
 
-The gage zero is 37.04 ft NAVD88, so:
+**Most stations are on the older datum.** 58% of those altitudes are published on NGVD29
+while a modern survey or lidar product is on NAVD88. Across the contiguous states the
+difference runs to feet.
+
+`on_datum` also takes the tidal datums (`MLLW`, `MLW`, `LMSL`, `MTL`, `DTL`, `MHW`, `MHHW`)
+for questions about level relative to the tide, and `get_satellite_passes` takes it to move
+SWOT elevations off the EGM2008 geoid they are measured against. Both cover the contiguous
+United States. Outside that coverage the conversion is refused and the reason is stated.
+
+## Tools
+
+| Tool                   | What it does                          |
+| ---------------------- | ------------------------------------- |
+| `find_locations`       | Find monitoring stations              |
+| `describe_location`    | Station metadata and reference frames |
+| `get_latest`           | The latest reading for each parameter |
+| `get_series`           | A time series over a date range       |
+| `slice_series`         | Work with part of a retrieved series  |
+| `get_peaks`            | Annual peak flows                     |
+| `get_forecast`         | Forecasts and flood thresholds        |
+| `get_model_forecast`   | Modelled flow for ungaged reaches     |
+| `get_satellite_passes` | Water levels measured from orbit      |
+| `navigate_network`     | Upstream and downstream stations      |
+| `get_basin`            | The contributing drainage basin       |
+| `lookup_parameter`     | Resolve a parameter code              |
+| `export_manifest`      | Everything that answered the question |
+
+All thirteen are read-only and annotated as such, so a client asks for consent once.
+
+Results come back as structured data against each tool's output schema, so a unit, datum or
+grade is a field the client can read directly.
+
+A series is returned as a handle with a summary. A year of 15-minute record is 35,000
+values, and no answer needs them in a context window.
+
+## Coverage
+
+| Region | Services | Available |
+| ------ | -------- | --------- |
+| United States | USGS, NOAA NWPS, NOAA National Water Model, NLDI, VDatum | All thirteen tools |
+| France | Hub'Eau | Search, metadata, latest readings, time series |
+| United Kingdom | Environment Agency | Search, metadata, latest readings |
+| Global | SWOT | Satellite water surface elevation |
+
+ERA5, GRACE, CAMELS and HydroBASINS are available to library callers.
+
+Each service publishes a different amount, and the tools say which. Hub'Eau states no unit
+on any value, so levels in millimetres and flows in litres per second are labelled here from
+a recorded table. The Environment Agency publishes no record grade on live data, so age is
+the only staleness signal for a UK reading.
+
+To find a UK station, `find_locations` takes `country=GB`. The agency matches river and town
+in full and in its own spelling, so `River Thames` returns stations and `Thames` returns
+none. Free text matched against the station name is the filter to use when the agency's
+spelling is unknown.
+
+## Protocol support
+
+GageLink serves MCP revision `2026-07-28` and the three handshake revisions before it
+(`2025-06-18`, `2025-03-26`, `2024-11-05`).
+
+The 2026 revision removed the `initialize` handshake. Every request carries its own version
+and capabilities, so a client calls a tool on its first message and learns what the server
+is through `server/discover`. Clients on the earlier revisions continue to open a session
+and keep it.
+
+Because a connection no longer implies a conversation, a client that wants a ledger of its
+own names one in `_meta`:
+
+```json
+{"_meta": {"io.github.adeniyikayodee.gagelink/conversation": "whatever-you-call-it"}}
+```
+
+Each name gets its own manifest, quantities and checks. A client that sends no name shares
+the default.
+
+For clients that cannot start a local process:
+
+```bash
+gagelink-mcp --http          # http://127.0.0.1:8765/mcp
+```
+
+This binds to loopback and checks the `Origin` header. It has no authentication, so
+`--host` on a reachable interface gives away your hourly allowance.
+
+## Reproducible answers
+
+Every retrieval is recorded with its URL, the time it was made, and a hash of the response
+body. `export_manifest` returns that record, and a session can be replayed later in three
+modes:
+
+* `offline` uses the archived bodies
+* `strict` checks the live service returns identical data
+* `revision_aware` separates a changed answer caused by an official record revision from one
+  caused by changed code
+
+The third mode exists because hydrology data is revised. A provisional measurement is often
+approved or corrected months later, so an answer can change for reasons that have nothing to
+do with the code. `revision_aware` tells the two causes apart.
+
+Values are also checked against the ledger, so an answer can be audited:
 
 ```text
-Stage = 3.02 + 37.04
-      = 40.06 ft NAVD88
-
-Freeboard = 41 - 40.06
-          = 0.94 ft
+[ok]         3.02 ft        from get_latest.00065
+[ok]         2960 ft3/s     from get_latest.00060
+[UNSOURCED]  116000 ft3/s   no tool output produced this value
 ```
-
-Without the datum conversion, the answer would be **37.98 ft**, which is wrong by a factor of 40.
-
-## Replayable results
-
-GageLink records the data used to produce an answer.
-
-A session can be saved and replayed later.
-
-There are three modes:
-
-* `offline` — use the saved data
-* `strict` — check whether the live data is identical
-* `revision_aware` — check whether the difference came from an official data revision
-
-This matters because hydrology data can change. A provisional measurement may later be revised or approved.
 
 ## Benchmark
 
-GageLink includes **waterbench**, a benchmark for testing whether better data interfaces help AI models work with hydrology data.
+`waterbench` measures whether the interface changes what a model gets right. It runs the
+same nine tasks under three conditions: raw API responses, structured results with the
+metadata stripped, and the full toolkit.
 
-It compares:
-
-* Raw API data
-* Structured data without metadata
-* Structured data with units, datums, quality and other context
-
-In the first test with gpt-oss-120b:
+First results, gpt-oss-120b, eight replicates, 216 runs:
 
 | Condition               | Correct |
 | ----------------------- | ------: |
@@ -204,23 +208,15 @@ In the first test with gpt-oss-120b:
 | Structured, no metadata |   63/72 |
 | GageLink                |   70/72 |
 
-The benchmark is small and uses one model, so these results are an early signal rather than a general claim about model performance.
+Six of the nine tasks sit at ceiling, which is a finding about the suite. Where it
+separates, the causes are legible. Two long-record tasks sent 49,864 and 42,006 prompt
+tokens through raw JSON against 5,462 and 2,384 through the toolkit. On the opaque-unit
+task, stripping the reference frames sent seven of eight runs into the recorded trap,
+answering with the USGS
+discharge of 3010 ft³/s where the forecast service had published 2.95 kcfs.
 
-## Getting started
-
-Install it:
-
-```bash
-pip install gagelink
-```
-
-Or run the MCP server:
-
-```bash
-gagelink-mcp
-```
-
-No account is needed to start. A free USGS key increases the limit from 50 to 1,000 requests per hour.
+One model and a small suite, so these numbers are an early signal about the interface. A
+general claim would need more models and more tasks.
 
 ## Development
 
@@ -230,7 +226,8 @@ python3 -m venv .venv
 .venv/bin/pytest
 ```
 
-Tests use recorded responses, so they do not need a live network connection.
+Requires Python 3.10 or later. The suite answers from recorded fixtures and needs no network
+access. `mypy src/gagelink` is expected to be clean.
 
 ## License
 
