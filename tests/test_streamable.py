@@ -294,7 +294,7 @@ def test_a_revision_this_server_does_not_speak_is_a_400_naming_the_ones_it_does(
 def test_an_unimplemented_method_is_a_404_carrying_a_json_rpc_error(endpoint):
     """The body is what separates this from the 404 of a server that does not host a modern
     endpoint at all."""
-    body, headers = modern("resources/list")
+    body, headers = modern("resources/subscribe")
     status, _, answer = ask(endpoint, body, headers)
     assert status == 404
     assert answer["error"]["code"] == -32601

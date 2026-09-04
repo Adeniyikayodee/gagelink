@@ -185,9 +185,12 @@ def test_initialize_is_never_answered_in_a_revision_that_has_no_handshake(server
 
 def test_an_unknown_method_is_a_404_rather_than_a_fault(server):
     """404 with -32601 in the body is what separates an unimplemented method from an
-    endpoint that is not there, which is the difference a dual-era client is reading for."""
+    endpoint that is not there, which is the difference a dual-era client is reading for.
+
+    `resources/subscribe` because the capability declaration says subscribe is false, so
+    this is a method a client can be expected to probe for and find absent."""
     with pytest.raises(MethodNotFound) as raised:
-        dispatch(server, "resources/list", meta())
+        dispatch(server, "resources/subscribe", meta())
     assert raised.value.code == -32601
     assert raised.value.status == 404
 

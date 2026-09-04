@@ -22,7 +22,15 @@ import os
 import sys
 from typing import Any, Callable
 
-from . import __version__
+from . import __version__, catalogue
+from .catalogue import (
+    CONVERTIBLE_DATUMS,
+    PROMPTS,
+    RESOURCE_TEMPLATES,
+    RESOURCES,
+    UnknownPrompt,
+    UnknownResource,
+)
 from .protocol import (
     COMPLETE,
     LEGACY_PROTOCOL_VERSION,
@@ -30,6 +38,7 @@ from .protocol import (
     SERVER_INFO_KEY,
     SUPPORTED_VERSIONS,
     Envelope,
+    MalformedRequest,
     MethodNotFound,
     ProtocolError,
     read_envelope,
@@ -38,7 +47,6 @@ from .results import DEFAULT_BUDGET_TOKENS, ErrorCode, Result
 from .schema import validate
 from .session import Session
 from .tools import RAISE_INTERNAL, Toolkit
-from .vdatum import TARGET, tidal_datums
 
 #: How this server names itself, in the one shape both revisions want it in. The modern
 #: revision puts it in a result's `_meta` and the handshake revisions put it in the
@@ -49,12 +57,18 @@ SERVER_INFO: dict[str, Any] = {
     "version": __version__,
 }
 
-#: What a caller may ask an elevation to be converted onto, in the order they are worth
-#: offering: the modern national datum first, since that is what a survey is on and what
-#: the majority of stations are not on, then the tidal datums for a question about the
-#: level relative to the tide. Built from the converter's own table rather than typed out
-#: again, so a datum cannot be offered to a model that the module would then refuse.
-CONVERTIBLE_DATUMS: list[str] = [TARGET, *tidal_datums()]
+#: What this server implements, in the shape both revisions declare it in. Sent at the
+#: handshake and again from `server/discover`, because the modern revision has no
+#: handshake to have sent it at and a client may not assume a capability it was not told
+#: about. `listChanged` is false on all three: the tool list is built at import, the
+#: prompts and resources are constants, and nothing in a running process can alter any of
+#: them, so a client that subscribed would be waiting on a notification that cannot come.
+CAPABILITIES: dict[str, Any] = {
+    "tools": {"listChanged": False},
+    "prompts": {"listChanged": False},
+    "resources": {"listChanged": False, "subscribe": False},
+    "completions": {},
+}
 
 #: How long a client may hold the discovery answer. Nothing in it changes while the process
 #: runs: the tool list is built at import and the version list is a constant. An hour is
@@ -853,11 +867,23 @@ class Server:
     def list_tools(self) -> list[dict[str, Any]]:
         return TOOLS
 
+    def read_resource(self, uri: str, conversation: str | None = None) -> dict[str, Any]:
+        """One resource, with the manifest scoped to whichever ledger asked for it.
+
+        The session is opened either way, since a named conversation gets a ledger the
+        moment it is named. What the callable saves is building the manifest itself, which
+        walks every retrieval and every quantity and is thrown away on a read of the
+        parameter table.
+        """
+        session, _ = self.conversation(conversation)
+        return catalogue.resource(uri, INSTRUCTIONS, session.manifest)
+
     def call_tool(
         self,
         name: str,
         arguments: dict[str, Any],
         conversation: str | None = None,
+        modern: bool = False,
     ) -> dict[str, Any]:
         """Run a tool and return its result as MCP content.
 
@@ -868,7 +894,7 @@ class Server:
         and the model's chance of saying what went wrong.
         """
         try:
-            return self._call(name, arguments, conversation)
+            return self._call(name, arguments, conversation, modern)
         except Exception as exc:
             if os.environ.get(RAISE_INTERNAL):
                 raise
@@ -887,6 +913,7 @@ class Server:
         name: str,
         arguments: dict[str, Any],
         conversation: str | None = None,
+        modern: bool = False,
     ) -> dict[str, Any]:
         session, toolkit = self.conversation(conversation)
 
@@ -912,10 +939,30 @@ class Server:
             )
 
         if name == "export_manifest":
-            return self._respond(
+            answered = self._respond(
                 Result(ok=True, data=session.manifest()).to_dict(self.budget_tokens),
                 ok=True,
             )
+            if modern:
+                # The same record is a resource, so a client that would rather fetch the
+                # manifest than carry it can be pointed at it. Offered only to the modern
+                # revision because `resource_link` postdates 2024-11-05, which this server
+                # still answers, and a client of that revision has no reading for a content
+                # block it was never told about.
+                answered["content"].append(
+                    {
+                        "type": "resource_link",
+                        "uri": f"{catalogue.SCHEME}manifest",
+                        "name": "manifest",
+                        "title": "This conversation's manifest",
+                        "description": (
+                            "The same record, readable again later without spending a "
+                            "tool call."
+                        ),
+                        "mimeType": "application/json",
+                    }
+                )
+            return answered
 
         method = getattr(toolkit, name)
         result: Result = method(**arguments)
@@ -957,7 +1004,7 @@ def dispatch(server: Server, method: str, params: dict[str, Any]) -> dict[str, A
             "protocolVersion": (
                 asked if asked in LEGACY_PROTOCOL_VERSIONS else LEGACY_PROTOCOL_VERSION
             ),
-            "capabilities": {"tools": {}},
+            "capabilities": dict(CAPABILITIES),
             "serverInfo": dict(SERVER_INFO),
             # Clients surface this to the model before it calls anything, which makes it
             # the highest-leverage text in the package.
@@ -982,7 +1029,7 @@ def _answer(
         # something a client learns by failing.
         return {
             "supportedVersions": list(SUPPORTED_VERSIONS),
-            "capabilities": {"tools": {}},
+            "capabilities": dict(CAPABILITIES),
             "instructions": INSTRUCTIONS,
             "ttlMs": DISCOVERY_TTL_MS,
             "cacheScope": "public",
@@ -996,7 +1043,38 @@ def _answer(
             params.get("name", ""),
             params.get("arguments") or {},
             envelope.conversation,
+            envelope.modern,
         )
+    if method == "prompts/list":
+        return {"prompts": PROMPTS}
+    if method == "prompts/get":
+        name = params.get("name", "")
+        try:
+            return catalogue.prompt(name, params.get("arguments") or {})
+        except UnknownPrompt:
+            declared = ", ".join(p["name"] for p in PROMPTS)
+            raise MalformedRequest(
+                f"no prompt named {name!r}. The prompts are {declared}."
+            ) from None
+    if method == "resources/list":
+        return {"resources": RESOURCES}
+    if method == "resources/templates/list":
+        return {"resourceTemplates": RESOURCE_TEMPLATES}
+    if method == "resources/read":
+        uri = params.get("uri", "")
+        try:
+            return server.read_resource(uri, envelope.conversation)
+        except UnknownResource:
+            # -32602 rather than -32002. The modern revision withdrew the resource-not-found
+            # code and reads a missing resource as a bad parameter, which is what
+            # MalformedRequest carries.
+            declared = ", ".join(r["uri"] for r in RESOURCES)
+            raise MalformedRequest(
+                f"no resource at {uri!r}. The resources are {declared}, and the templates "
+                f"are " + ", ".join(t["uriTemplate"] for t in RESOURCE_TEMPLATES) + "."
+            ) from None
+    if method == "completion/complete":
+        return catalogue.complete(params.get("ref") or {}, params.get("argument") or {})
     raise MethodNotFound(method)
 
 

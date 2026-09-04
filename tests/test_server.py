@@ -101,7 +101,7 @@ def test_initialize_announces_the_server_and_the_protocol(server):
 def test_an_unknown_method_is_a_method_not_found_rather_than_a_server_fault():
     """A client is meant to be able to probe for a capability, and -32603 reads as the
     server having broken."""
-    exchange = serve(['{"jsonrpc":"2.0","id":1,"method":"resources/list"}'])
+    exchange = serve(['{"jsonrpc":"2.0","id":1,"method":"resources/subscribe"}'])
     assert exchange[0]["error"]["code"] == -32601
 
 
