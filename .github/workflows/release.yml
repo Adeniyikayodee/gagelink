@@ -24,7 +24,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install build twine
+      # The package itself as well as the build tools: scripts/build_bundle.py imports
+      # gagelink to generate the bundle manifest from the running code, which is the point
+      # of generating it, and that import wants the dependencies present.
+      - run: pip install build twine -e .
       # The tag is the release; the version is read from the module and repeated in the
       # registry manifest, so these are the places the three can still disagree. Caught
       # here rather than on PyPI, where the filename is permanent, or in the registry,
