@@ -145,12 +145,33 @@ def test_the_summary_an_agent_reads_first_is_served_from_a_root():
     assert MANIFEST["websiteUrl"].startswith("https://adeniyikayodee.github.io/gagelink")
 
 
+#: What the registry will accept, from the schema server.json names in its own $schema
+#: field. Held here as numbers rather than fetched, because the suite answers offline and a
+#: check that needs the network is a check that gets skipped. The v0.7.0 release published
+#: to PyPI and then failed at the registry on a description of 193 characters, which is the
+#: kind of thing worth finding before a version number is spent.
+REGISTRY_LIMITS = {"description": 100, "name": 200, "title": 100, "version": 255}
+
+
+def test_the_manifest_fits_inside_what_the_registry_accepts():
+    """A field over length is a 422 after PyPI has already taken the release, and a PyPI
+    filename is permanent, so the registry is the half that cannot then be retried under
+    the same version."""
+    for field, limit in REGISTRY_LIMITS.items():
+        value = MANIFEST.get(field)
+        if value is not None:
+            assert len(value) <= limit, f"{field} is {len(value)} characters, limit {limit}"
+
+
 def test_the_manifest_description_names_every_network_that_answers():
     """A search for a UK or French station matches on this text, and a description naming
     only the US services is one those searches do not reach."""
     described = MANIFEST["description"]
     for service in ("USGS", "NOAA", "Hub'Eau", "Environment Agency", "SWOT"):
         assert service in described, service
+    # Both constraints at once is the whole difficulty: a hundred characters that name
+    # five services leave room for little else, so this is checked rather than eyeballed.
+    assert len(described) <= REGISTRY_LIMITS["description"]
 
 
 # The surface besides the tools ------------------------------------------------------------

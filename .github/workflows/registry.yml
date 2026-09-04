@@ -1,0 +1,58 @@
+name: registry
+
+# Publishes server.json to the MCP registry on its own, without a release.
+#
+# The release workflow does this as its last job, which is right for a normal version: the
+# registry should never be behind PyPI. But the two can need publishing separately. The
+# manifest carries things the package does not, a description and a website among them, and
+# a correction to one of those is not worth a version number. It happened at v0.7.0, where
+# PyPI took the release and the registry refused it for a description four characters short
+# of twice the limit, leaving the registry a version behind with nothing to retry: a PyPI
+# filename is permanent, so the tag could not be moved and rerun.
+#
+# Run from the Actions tab. It publishes whatever server.json is on the branch it runs from,
+# so the version it advertises has to already exist on PyPI, which is checked first.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      # The registry will not list a package it cannot find, and the failure it gives for
+      # that is harder to read than this one.
+      - name: the version in the manifest is on PyPI
+        run: |
+          version=$(python3 -c "import json; print(json.load(open('server.json'))['version'])")
+          if ! curl -sf "https://pypi.org/pypi/gagelink/${version}/json" >/dev/null; then
+            echo "server.json advertises ${version} and PyPI has no such release" >&2
+            exit 1
+          fi
+          echo "gagelink ${version} is on PyPI"
+
+      - name: install mcp-publisher
+        run: |
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/').tar.gz" \
+            | tar xz mcp-publisher
+
+      - name: publish to the MCP registry
+        run: |
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish
+
+      - name: the registry serves what the manifest advertises
+        run: |
+          version=$(python3 -c "import json; print(json.load(open('server.json'))['version'])")
+          serving=$(curl -sf "https://registry.modelcontextprotocol.io/v0/servers?search=gagelink" \
+            | python3 -c "import json,sys; print(next((s['server']['version'] for s in json.load(sys.stdin)['servers'] if s['_meta']['io.modelcontextprotocol.registry/official'].get('isLatest')), 'none'))")
+          if [ "$serving" != "$version" ]; then
+            echo "the registry is serving $serving after publishing $version" >&2
+            exit 1
+          fi
+          echo "the registry is serving $version"
