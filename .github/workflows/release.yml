@@ -1,8 +1,16 @@
 name: release
 
-# Publishes to PyPI when a version tag is pushed. Authentication is by trusted
-# publishing, so no API token is stored here; the one-time setup is on PyPI under
-# Publishing, naming this repository and the workflow file below.
+# Publishes to PyPI when a version tag is pushed, then to the MCP registry from the same
+# tag. Both authenticate without a stored secret: PyPI by trusted publishing, whose
+# one-time setup is on PyPI under Publishing naming this repository and this file, and the
+# registry by GitHub OIDC, which proves the workflow runs in the repository the server name
+# io.github.Adeniyikayodee/gagelink claims.
+#
+# The registry step is here rather than run by hand because the two drifted when it was not:
+# 0.6.0 reached PyPI while the registry went on serving 0.5.0, so every client that resolves
+# through the registry installed a release without the 2026 protocol, the datum conversion,
+# or the UK search. A publish that is part of the release cannot be the step somebody
+# forgets.
 
 on:
   push:
@@ -17,10 +25,11 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install build twine
-      # The tag is the release; the version is read from the module, so this is the one
-      # place the two can still disagree. Caught here rather than on PyPI, where the
-      # filename is permanent.
-      - name: tag matches the packaged version
+      # The tag is the release; the version is read from the module and repeated in the
+      # registry manifest, so these are the places the three can still disagree. Caught
+      # here rather than on PyPI, where the filename is permanent, or in the registry,
+      # where a manifest advertises a release that may not exist.
+      - name: tag matches the packaged version and the registry manifest
         run: |
           tagged="${GITHUB_REF_NAME#v}"
           declared=$(python -c "import re,pathlib; print(re.search(r'__version__ = \"([^\"]+)\"', pathlib.Path('src/gagelink/__init__.py').read_text()).group(1))")
@@ -28,12 +37,30 @@ jobs:
             echo "tag $GITHUB_REF_NAME does not match __version__ $declared" >&2
             exit 1
           fi
+          python - "$tagged" <<'PY'
+          import json, pathlib, sys
+          tagged = sys.argv[1]
+          manifest = json.loads(pathlib.Path("server.json").read_text())
+          versions = {manifest["version"], manifest["packages"][0]["version"]}
+          if versions != {tagged}:
+              sys.exit(f"server.json declares {sorted(versions)} and the tag is {tagged}")
+          PY
       - run: python -m build
       - run: twine check dist/*
       - uses: actions/upload-artifact@v4
         with:
           name: dist
           path: dist/
+
+      # Built here rather than in its own job so it is made from the same checkout the
+      # wheel was, and uploaded separately so the PyPI publish below sees only the two
+      # files it is meant to.
+      - name: build the installable bundle
+        run: python scripts/build_bundle.py bundle/gagelink-${GITHUB_REF_NAME#v}.mcpb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundle
+          path: bundle/
 
   publish:
     needs: build
@@ -46,3 +73,83 @@ jobs:
           name: dist
           path: dist/
       - uses: pypa/gh-action-pypi-publish@release/v1
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: bundle
+          path: bundle/
+      # The one install path that asks for nothing first, so it belongs where somebody
+      # arriving from the repository will see it rather than in an artifact that expires.
+      # A tag push creates no release on its own, so this makes one where there is none
+      # and adds to one where a draft is already waiting.
+      - name: attach the bundle to the release
+        run: |
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" bundle/*.mcpb --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$GITHUB_REF_NAME" bundle/*.mcpb \
+              --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  registry:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      # The whole of the authentication. The registry reads this token to confirm the
+      # workflow runs in Adeniyikayodee/gagelink, which is what the server name claims, so
+      # there is no key to store or rotate.
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      # The registry validates the package before it will list it: it fetches the release
+      # from PyPI and checks the description carries the mcp-name line that matches the
+      # server name. PyPI does not index instantly, so publishing straight after the upload
+      # fails on a release that is there but not yet visible. Waited for rather than slept
+      # through, so a slow index costs a minute and a failed upload still fails.
+      - name: wait for PyPI to serve the release
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          for attempt in $(seq 1 30); do
+            if curl -sf "https://pypi.org/pypi/gagelink/${version}/json" >/dev/null; then
+              echo "gagelink ${version} is on PyPI"
+              exit 0
+            fi
+            echo "attempt ${attempt}: not indexed yet"
+            sleep 10
+          done
+          echo "gagelink ${version} did not appear on PyPI within five minutes" >&2
+          exit 1
+
+      - name: install mcp-publisher
+        run: |
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/').tar.gz" \
+            | tar xz mcp-publisher
+
+      - name: publish to the MCP registry
+        run: |
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish
+
+      # Read back rather than trusted. A publish that returns success and lists the
+      # previous version is the failure this job exists to prevent, and it is invisible
+      # unless somebody asks the registry what it is now serving.
+      - name: the registry serves the version that was just published
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          serving=$(curl -sf "https://registry.modelcontextprotocol.io/v0/servers?search=gagelink" \
+            | python3 -c "import json,sys; print(next((s['server']['version'] for s in json.load(sys.stdin)['servers'] if s['_meta']['io.modelcontextprotocol.registry/official'].get('isLatest')), 'none'))")
+          if [ "$serving" != "$version" ]; then
+            echo "the registry is serving $serving after publishing $version" >&2
+            exit 1
+          fi
+          echo "the registry is serving $version"

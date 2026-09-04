@@ -1,0 +1,68 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GageLink</title>
+<meta name="description" content="Hydrology data for AI agents, with the reference frames kept attached. River level, streamflow, flood forecasts, basins and satellite water levels from USGS, NOAA, Hub'Eau, the UK Environment Agency and SWOT.">
+<link rel="alternate" type="text/plain" href="/gagelink/llms.txt" title="llms.txt">
+
+<style>
+  :root { color-scheme: light dark; --ink: #16181d; --dim: #5b6270; --rule: #dfe2e8; --bg: #fbfbfa; --code: #f1f2f4; }
+  @media (prefers-color-scheme: dark) {
+    :root { --ink: #e6e8ec; --dim: #9aa2b1; --rule: #2b2f38; --bg: #14161a; --code: #1e2127; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0 auto; max-width: 42rem; padding: 3rem 1.25rem 5rem;
+    background: var(--bg); color: var(--ink);
+    font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  h1 { font-size: 1.6rem; margin: 0 0 .25rem; letter-spacing: -.01em; }
+  h2 { font-size: 1rem; margin: 2.5rem 0 .5rem; letter-spacing: .02em; text-transform: uppercase; color: var(--dim); }
+  p { margin: 0 0 1rem; }
+  .lede { font-size: 1.05rem; color: var(--dim); margin-bottom: 2rem; }
+  a { color: inherit; text-underline-offset: 3px; }
+  pre, code { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace; font-size: .875rem; }
+  pre { background: var(--code); padding: .85rem 1rem; border-radius: 6px; overflow-x: auto; margin: 0 0 1rem; }
+  ul { margin: 0 0 1rem; padding-left: 1.1rem; }
+  li { margin-bottom: .3rem; }
+  nav { display: flex; flex-wrap: wrap; gap: 1.25rem; padding-top: 1.5rem; border-top: 1px solid var(--rule); margin-top: 3rem; font-size: .9rem; color: var(--dim); }
+  footer { margin-top: 2rem; font-size: .85rem; color: var(--dim); }
+</style>
+
+<h1>GageLink</h1>
+<p class="lede">Hydrology data for AI agents, with the reference frames kept attached.</p>
+
+<p>River levels, streamflow, flood forecasts, drainage basins and satellite water levels
+from USGS, NOAA, Hub'Eau, the UK Environment Agency and SWOT. Every value arrives carrying
+its unit, the datum it was measured from, its timezone, and whether the record is
+provisional or approved.</p>
+
+<h2>Run it</h2>
+<pre><code>uvx --from gagelink gagelink-mcp</code></pre>
+<p>Or in an MCP client, with nothing installed:</p>
+<pre><code>{"mcpServers": {"gagelink": {"command": "uvx",
+  "args": ["--from", "gagelink", "gagelink-mcp"]}}}</code></pre>
+<p>No account is needed.</p>
+
+<h2>Why the frames matter</h2>
+<p>A river stage is measured upward from the gage's own zero. A surveyed levee crest is
+measured upward from a national datum. Both are lengths in feet, so subtracting one from
+the other produces a number that reads as freeboard, and a units library will pass it.</p>
+<p>At Little Falls on the Potomac that subtraction overstates the margin by 37 ft, in the
+direction of calling a levee safe. GageLink refuses it and returns the offset that makes
+it well defined, along with how well that offset is known.</p>
+
+<h2>For agents</h2>
+<ul>
+  <li><a href="/gagelink/llms.txt">llms.txt</a>: what this covers, in one file</li>
+  <li><a href="/gagelink/server.json">server.json</a>: the MCP registry manifest</li>
+</ul>
+
+<nav>
+  <a href="https://github.com/Adeniyikayodee/gagelink">Source</a>
+  <a href="https://pypi.org/project/gagelink/">PyPI</a>
+  <a href="https://registry.modelcontextprotocol.io/v0/servers?search=gagelink">MCP registry</a>
+  <a href="https://github.com/Adeniyikayodee/gagelink/issues">Issues</a>
+</nav>
+
+<footer>MIT licensed. Pre-alpha: the API may change.</footer>

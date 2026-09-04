@@ -1,0 +1,55 @@
+name: pages
+
+# Serves llms.txt from a root.
+#
+# The file has existed since the beginning and has only ever been reachable at a blob URL
+# inside the repository, which is not where anything looks for it. The convention is a
+# fetch of https://<domain>/llms.txt, so a summary written for an agent to read first was
+# in practice read by nothing. server.json is served beside it for the same reason: a
+# client holding the server name can fetch the manifest without going through the registry.
+#
+# Nothing is generated here that is not already in the repository, so the site cannot drift
+# from what ships.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time, and a push that lands mid-run supersedes rather than queues:
+# the site is a copy of main, so an older build finishing later would publish backwards.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: assemble the site
+        run: |
+          mkdir -p _site
+          cp llms.txt server.json LICENSE _site/
+          cp site/index.html _site/index.html
+          # A crawler that respects robots.txt and finds none still crawls; one that finds
+          # this knows where the summary is without guessing at the filename.
+          printf 'User-agent: *\nAllow: /\n\nSitemap: https://adeniyikayodee.github.io/gagelink/llms.txt\n' > _site/robots.txt
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

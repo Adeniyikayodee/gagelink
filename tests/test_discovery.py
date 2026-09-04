@@ -90,8 +90,13 @@ def test_the_readme_leads_with_what_it_answers():
     that it refuses a comparison rather than guessing at one. The copy-paste configuration
     is checked for separately and is allowed to sit further down, since somebody who has
     decided will scroll and somebody who has not will not.
+
+    The budget is a screen rather than a byte count, and it moved from 2200 when a third
+    install path was added. Raise it for an install path or a heading, not to make room for
+    prose: the reason the number is here at all is that the section above it grows and the
+    reasons to use this do not move up on their own.
     """
-    head = README[:2200]
+    head = README[:2400]
     assert "What can it answer?" in head
     assert "refuses" in head
 
@@ -99,3 +104,110 @@ def test_the_readme_leads_with_what_it_answers():
 def test_the_readme_carries_a_configuration_that_can_be_pasted():
     """The no-install path. Without it the first step is working out what to install."""
     assert "mcpServers" in README
+
+
+# The publish path -------------------------------------------------------------------------
+
+
+RELEASE = (ROOT / ".github" / "workflows" / "release.yml").read_text()
+PAGES = (ROOT / ".github" / "workflows" / "pages.yml").read_text()
+
+
+def test_the_release_publishes_to_the_registry_and_not_only_to_pypi():
+    """The two drifted when the registry publish was a manual step: 0.6.0 reached PyPI
+    while the registry went on serving 0.5.0, so anything resolving through the registry
+    installed a release without the 2026 protocol, the datum conversion, or the UK search.
+    A publish that is part of the release cannot be the step somebody forgets."""
+    assert "mcp-publisher" in RELEASE
+    assert "login github-oidc" in RELEASE
+    assert "registry:" in RELEASE
+    assert "needs: publish" in RELEASE
+
+
+def test_the_release_reads_back_what_the_registry_is_serving():
+    """A publish that returns success and lists the previous version is the exact failure
+    the job exists to prevent, and it is invisible unless something asks."""
+    assert "registry.modelcontextprotocol.io/v0/servers?search=gagelink" in RELEASE
+    assert "isLatest" in RELEASE
+
+
+def test_the_release_refuses_a_tag_that_disagrees_with_the_manifest():
+    """server.json carries the version the registry will serve, so a tag built from a
+    stale manifest advertises a release that may not exist."""
+    assert "server.json" in RELEASE
+
+
+def test_the_summary_an_agent_reads_first_is_served_from_a_root():
+    """llms.txt is looked for at https://<domain>/llms.txt. One reachable only at a blob
+    URL inside the repository is a file written for agents that no agent fetches."""
+    assert "llms.txt" in PAGES
+    assert "server.json" in PAGES
+    assert MANIFEST["websiteUrl"].startswith("https://adeniyikayodee.github.io/gagelink")
+
+
+def test_the_manifest_description_names_every_network_that_answers():
+    """A search for a UK or French station matches on this text, and a description naming
+    only the US services is one those searches do not reach."""
+    described = MANIFEST["description"]
+    for service in ("USGS", "NOAA", "Hub'Eau", "Environment Agency", "SWOT"):
+        assert service in described, service
+
+
+# The surface besides the tools ------------------------------------------------------------
+
+
+def test_every_prompt_is_named_where_an_agent_will_read_it():
+    """A prompt states an order of operations a model gets wrong when it assembles one
+    itself, which makes it worth finding before installation rather than after."""
+    from gagelink.catalogue import PROMPTS
+
+    for declared in PROMPTS:
+        assert declared["name"] in LLMS, declared["name"]
+        assert declared["name"] in README, declared["name"]
+
+
+def test_every_resource_is_named_where_an_agent_will_read_it():
+    from gagelink.catalogue import RESOURCES
+
+    for declared in RESOURCES:
+        assert declared["uri"] in LLMS, declared["uri"]
+        assert declared["uri"] in README, declared["uri"]
+
+
+def test_the_bundle_is_offered_as_an_install_path():
+    """The one path that asks for nothing first. Somebody without a Python environment
+    prepared has no other way in that does not start with preparing one."""
+    assert ".mcpb" in README
+    assert ".mcpb" in LLMS
+    assert "scripts/build_bundle.py" in RELEASE
+
+
+def test_the_bundle_manifest_is_generated_from_the_package_it_describes():
+    """A tool list maintained by hand beside the code goes stale in the direction of
+    promising tools that are not there, which a client shows before installation."""
+    import sys
+
+    sys.path.insert(0, str(ROOT / "scripts"))
+    from build_bundle import manifest
+
+    from gagelink.catalogue import PROMPTS
+    from gagelink.server import TOOLS
+
+    built = manifest()
+    assert built["version"] == gagelink.__version__
+    assert [t["name"] for t in built["tools"]] == [t["name"] for t in TOOLS]
+    assert [p["name"] for p in built["prompts"]] == [p["name"] for p in PROMPTS]
+
+
+def test_the_bundle_asks_for_no_credential_to_start():
+    """The manifest promises the server runs without a key, the same as every other
+    install path. A required field here would be a wall the other paths do not have."""
+    import sys
+
+    sys.path.insert(0, str(ROOT / "scripts"))
+    from build_bundle import manifest
+
+    configured = manifest()["user_config"]
+    assert list(configured) == ["api_key"]
+    assert configured["api_key"]["required"] is False
+    assert configured["api_key"]["sensitive"] is True

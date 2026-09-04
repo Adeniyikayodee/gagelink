@@ -13,11 +13,7 @@ mcp-name: io.github.Adeniyikayodee/gagelink
 
 ## Install
 
-```bash
-pip install gagelink
-```
-
-To use it from an MCP client, with nothing installed:
+`pip install gagelink` for the library. From an MCP client, with nothing installed:
 
 ```json
 {
@@ -30,9 +26,11 @@ To use it from an MCP client, with nothing installed:
 }
 ```
 
-No account is needed. A free key from
-[api.waterdata.usgs.gov/signup](https://api.waterdata.usgs.gov/signup) raises the allowance
-from 50 requests an hour to 1,000. Set it as `GAGELINK_API_KEY`.
+Or open the [`.mcpb` bundle](https://github.com/Adeniyikayodee/gagelink/releases/latest),
+which carries the server and its dependencies in one file.
+
+No account is needed. A [free key](https://api.waterdata.usgs.gov/signup) raises the
+allowance from 50 requests an hour to 1,000; set it as `GAGELINK_API_KEY`.
 
 ## What can it answer?
 
@@ -121,6 +119,38 @@ grade is a field the client can read directly.
 A series is returned as a handle with a summary. A year of 15-minute record is 35,000
 values, and no answer needs them in a context window.
 
+## Prompts
+
+A tool list says what can be called. It does not say what to call first, and the datum rule
+above is an order of operations rather than a call. Four prompts state the ones that go
+wrong when a model assembles them itself.
+
+| Prompt                | What it walks through                                    |
+| --------------------- | -------------------------------------------------------- |
+| `freeboard_check`     | Fetch the offset, then difference, then bound the answer |
+| `flood_status`        | Stage against flood category, now and over the forecast  |
+| `find_a_station`      | The filter the relevant agency actually matches on       |
+| `reproducible_answer` | Answer, then export the manifest                         |
+
+## Resources
+
+The tables that do not change between calls, readable without spending a request against
+the hourly allowance.
+
+| Resource                 | What is in it                                        |
+| ------------------------ | ---------------------------------------------------- |
+| `gagelink://instructions` | The four rules that decide whether an answer is right |
+| `gagelink://parameters`   | The common parameter codes and what each measures     |
+| `gagelink://datums`       | Every datum named here, and which can be converted onto |
+| `gagelink://coverage`     | Which tools answer for which country, and what each service omits |
+| `gagelink://manifest`     | This conversation's ledger, without a tool call       |
+
+`gagelink://parameter/{code}` and `gagelink://datum/{name}` are templates, and their
+variables complete: the server answers `completion/complete` for them and for the prompt
+arguments with a closed set of values. The specification scopes completion to prompt
+arguments and resource template variables, which is why those two vocabularies are exposed
+as templates as well as inside the tool schemas.
+
 ## Coverage
 
 | Region | Services | Available |
@@ -145,7 +175,9 @@ spelling is unknown.
 ## Protocol support
 
 GageLink serves MCP revision `2026-07-28` and the three handshake revisions before it
-(`2025-06-18`, `2025-03-26`, `2024-11-05`).
+(`2025-06-18`, `2025-03-26`, `2024-11-05`). It declares tools, prompts, resources and
+completions, and declares `listChanged` false on all of them: every list is built at
+import, so a client that subscribed would be waiting on a notification that cannot come.
 
 The 2026 revision removed the `initialize` handshake. Every request carries its own version
 and capabilities, so a client calls a tool on its first message and learns what the server

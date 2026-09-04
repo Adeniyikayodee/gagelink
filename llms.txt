@@ -22,6 +22,10 @@ allowance from 50 requests an hour to 1000; set it as GAGELINK_API_KEY.
 For a client that cannot spawn a process, `gagelink-mcp --http` serves the same tools over
 Streamable HTTP at http://127.0.0.1:8765/mcp, on loopback and with no authentication.
 
+For a client that installs bundles, the .mcpb attached to the latest release at
+https://github.com/Adeniyikayodee/gagelink/releases/latest carries the server and its
+dependencies in one file.
+
 ## Questions it answers
 
 - How high is the river at a gage, and how does that compare with flood stage?
@@ -40,10 +44,35 @@ find_locations, describe_location, get_latest, get_series, slice_series, get_pea
 get_forecast, get_model_forecast, get_satellite_passes, navigate_network, get_basin,
 lookup_parameter, export_manifest.
 
+All thirteen are read-only. Results are structured against each tool's output schema, so a
+unit, datum, or record grade is a field rather than prose to parse.
+
 find_locations takes country: US for USGS, FR for Hub'Eau, GB for the Environment Agency.
 The UK filters are river as the agency writes it (River Thames, not Thames), county as the
 town, and state as free text matched against the station name, which is the one to reach for
 when the agency's spelling is not known.
+
+## Prompts
+
+freeboard_check, flood_status, find_a_station, reproducible_answer.
+
+A tool list says what can be called and not what to call first. The datum rule below is an
+order of operations rather than a call, so freeboard_check states it: fetch the offset,
+then difference, then bound the answer by how well the offset is known. find_a_station
+exists because the three networks disagree about what a searchable name is, and the wrong
+filter returns an empty list rather than an error, which reads as absence of coverage.
+
+## Resources
+
+gagelink://instructions is the four rules that decide whether an answer is right, for a
+client that does not surface what a server sends at discovery. gagelink://parameters is the
+common parameter codes. gagelink://datums is every datum named here and which of them an
+elevation can be converted onto. gagelink://coverage is which tools answer for which
+country and what each service does not publish. gagelink://manifest is this conversation's
+ledger, readable without spending a tool call.
+
+gagelink://parameter/{code} and gagelink://datum/{name} are templates whose variables
+complete, along with the prompt arguments that take a closed set of values.
 
 ## What it will refuse, and why that is the point
 
@@ -72,6 +101,14 @@ NOAA VDatum,
 USGS Hydro Network-Linked Data Index, SWOT via NASA Hydrocron, ERA5 via the Copernicus
 Climate Data Store, GRACE via NASA Earthdata, and local copies of CAMELS and HydroSHEDS.
 
+## Protocol
+
+MCP revision 2026-07-28 and the three handshake revisions before it (2025-06-18,
+2025-03-26, 2024-11-05). Tools, prompts, resources, and completions are declared;
+listChanged is false on all of them because every list is built at import.
+
 ## Documentation
 
 - README: https://github.com/Adeniyikayodee/gagelink/blob/main/README.md
+- Site: https://adeniyikayodee.github.io/gagelink/
+- Registry: https://registry.modelcontextprotocol.io/v0/servers?search=gagelink

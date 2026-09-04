@@ -1,9 +1,9 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.Adeniyikayodee/gagelink",
-  "description": "River level, streamflow, flood forecasts and basins from USGS, NOAA and SWOT, with units and datums",
-  "version": "0.6.0",
-  "websiteUrl": "https://github.com/Adeniyikayodee/gagelink",
+  "description": "River level, streamflow, flood forecasts, basins and satellite water levels from USGS, NOAA, France's Hub'Eau, the UK Environment Agency and SWOT, with units, datums and record quality attached",
+  "version": "0.7.0",
+  "websiteUrl": "https://adeniyikayodee.github.io/gagelink/",
   "repository": {
     "url": "https://github.com/Adeniyikayodee/gagelink",
     "source": "github"
@@ -13,7 +13,7 @@
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
       "identifier": "gagelink",
-      "version": "0.6.0",
+      "version": "0.7.0",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"

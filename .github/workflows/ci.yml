@@ -28,3 +28,8 @@ jobs:
         run: python demo/freeboard.py
       - name: benchmark harness runs offline
         run: python -m bench --dry-run
+      # Built and started on every push rather than only at a tag. The bundle assembles
+      # from a generated manifest and a pip-resolved dependency tree, and the suite above
+      # exercises neither, so without this the first sign of a broken bundle is the release.
+      - name: the installable bundle assembles and starts
+        run: python scripts/check_bundle.py
